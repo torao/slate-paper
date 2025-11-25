@@ -5,25 +5,223 @@
 \usepackage{titlesec}
 \usepackage{setspace}
 \usepackage{hyperref}
-\usepackage{pxjahyper} % 日本語対応のハイパーリンク
+\usepackage{pxjahyper}
 \usepackage{indentfirst}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage[tableposition=bottom]{caption}
 \setstretch{1.2}
 
-\title{Slate: 追記最適化型ハッシュツリーによる構造的同期アルゴリズム}
+\title{Slate: 分散ログ同期のための追記最適化マークルツリー}
+% \title{Slate: An Append-Optimized Hash Tree for Distributed-Log Synchronization}
 \author{鷹見 虎男}
 \date{\today}
+\hypersetup{
+  pdftitle    = {Slate: 分散ログ同期のための追記最適化マークルツリー},
+  pdfauthor   = {鷹見 虎男},
+  pdfkeywords = {Stratified Hash Tree, Slate, 分散ログ, 追記最適化, 時間的局所性, 同期, 分岐検出, Merkle ツリー, ハッシュツリー}
+}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-% 要約をここに記述
+大規模分散システムにおいて、分散するレプリカ間でのトランザクションログの迅速な修復と同期は、可用性・整合性・障害回復の性能に大きく影響する。現実的な分散ログは追記偏重のアクセス特性を持ち、その同期性能は分岐 (フォーク) の検出と修復の効率に大きく依存する。一方で、従来の方法はそのようなログ上で末尾からの線形探索で分岐を検出するため大規模なデータセットに対して非効率であり、適用可能な局面は限定的である。本論文は、大きな履歴遡及が頻繁に発生する状況でも効率的に機能する、追記最適化と時間局所性に基づくをアクセス特性を持つ Merkle Tree である \emph{Slate}（Stratified Hash Tree）を提案する。本論文ではまた、Slate において最新エントリから任意の位置のデータに到達するまでの I/O 回数分布がハミング距離に従うことを示し、分布の傾向により I/O が最新近傍で優先的に削減されることを理論化する。これに基づき、I/O がコスト支配的な一般的な状況において、$O(\log n)$ I/O での分岐位置の同定と $O(n)$ I/O での同期転送を満たす、暗号論的に確立された安全性に基づく修復手順を与える。さらに、証明サイズと比較ラウンド数について上界を導き、追記偏重のワークロードでの現実的な期待コストが最新データからのハミング距離に支配される非対称な性能特性を示す。
+
+Rust の実装を用いた評価では、従来の Merkle Tree 構造に比べ、最新付近に偏る差分同期で転送量・探索 I/O・キャッシュミスが一貫して低減することを確認した。Slate は分散トランザクションログ、非同期レプリケーションログ、ブロックチェーン、および Git に類するハッシュグラフの分岐検出と修復に適用可能であり、追記最適化・時間局所性・認証性を両立する実用的基盤を提供する。
 \end{abstract}
 
-\tableofcontents
-\newpage
+\textbf{Keywords}: Stratified Hash Tree, Slate, 分散ログ, 追記最適化, 時間的局所性, 分岐検出, 部分転送, 認証付きデータ構造
 
-\section{はじめに}
+% \tableofcontents
+% \newpage
+
+Slate はデータ列を追記順に層として保存し、各エントリが過去の Merkle Tree への指数間隔の参照を持つことで、二次記憶装置に最適化された追記性能と、最近追加されたデータのアクセスがより少ない I/O 回数の傾向を持つ高速なアクセスを提供する。
+
+\section{INTRODUCTION}
+
+\subsection{動機}
+多くの大規模分散システムでは、レプリカ間の順序付き更新ログの複製が可用性・整合性・障害回復の性能に依存する。分散ログは現実的な多くのワークロードで追記偏重 (append-heavy) であり\cite{kafka2011}、さらに最新近傍に参照が偏る時間的局所性を持つ。ログ末尾の確定していない (未コミット) データは、レプリカ間の自然な遅延やネットワーク分断、一時的な故障、構成変更により、複数のレプリカで異なる (分岐する) 可能性がある。このような状況において、レプリカ間の各ログの分岐を効率的に検出し、修復する効率が、システムのコミットまでのレイテンシや回復時間 (RTO/RPO) に直接影響する。
+
+Merkle Tree \cite{merkle1989} まはたハッシュツリーは順序付き集合を暗号論的な厳密さの下で効率的に比較・検証することができるデータ構造である。この検証を部分木へ再帰的に適用することで、差異の有無のみならず、順序付き集合のどこが異なるかを効率的に特定することができる。Merkle Tree の亜種である History Tree \cite{crosby2009} は、追記専用を前提とした動的な構造を持ち、第三者が発行済みの証明書を監査するための CT (Certificate Transparency) \cite{ct2021} で現実のシステムで稼働している。
+
+ログを History Tree 構造に適用することで効率的な分岐検出を行うことができるが、History Tree は証明書のような信頼性の高いデータの改ざん検出や発行証跡として使用することに焦点を当てており、この構造を追記最適化する試みや、ログの分岐検出やその修復を行う議論は我々の知る限り行われていない。
+
+本研究は History Tree を分散ログの分岐検出と修復の用途に拡張し、二次記憶装置に対して追記最適化された直列化構造と、最新に近いエントリをより効率的に参照できる時間局所性 (temporal locality) を持つデータ構造である \textbf{Slate} (Stratified Hash Tree) を提案する。そして、本論文では Slate において最新エントリから任意の葉に到達するまでの I/O 回数がハミング距離に従うことを示し、その上限を示すことで、最新近傍において I/O 回数が優先的に削減されることを示す。
+
+\subsection{問題設定}
+本論文は単調増加するインデックス $i\in\mathbb{N}$ によって識別される値の列であるログ $D=(v_1,v_2,\ldots,v_n)$ を想定する。ログは追記 (append) と切り詰め (truncate) のみによって変更され、個別の値が更新されることはない。2 つの非ビザンチンレプリカ $A$ と $B$  が保持するそれぞれのログを $D_A$ と $D_B$ とし、両者の\textbf{最長共通接頭辞長} (longest common prefix; LCD) を $d=\mathrm{LCD}(D_A,D_B)$ と定義する。本文の目的は次の二点である:
+
+\begin{enumerate}
+    \item \textbf{インデックス参照} (index reference): 想定するアクセスモデルは、\textbf{時間局所性} (temporal locality) に基づき、最新に近い値に統計的に偏ると仮定する。形式的には \(\delta=n-i\) に対して \(\mathrm{Pr}[\mathrm{get}(i)]=f(\delta)\) が \(\delta\) の単調減少関数 (例えば幾何分布、Zipf 近似、指数減衰など) である。
+    \item \textbf{分岐点検出} (fork detection): レプリカ間のインタラクション数と転送量を最小化して、2 つのログ $D_A$ と $D_B$ の LCD 長 $d$ を特定する。言い換えると、$D_A$ と $D_B$ で異なる値が最初に現われる位置 $d+1$ を (存在すれば) 特定する。
+    \item \textbf{修復} (repair): 検出した $d$ を用いて、片方のログの接尾辞をもう片方のログに転送して整合 (同期) する。これは、例えば $D_A$ を $(v_1,v_2,\ldots,v_d)$ に切り詰め、他方の $D_B$ の接尾辞 $(v_{d+1},\ldots)$ を転送して追加する。
+\end{enumerate}
+
+これらは、追記偏重の大規模ログ運用下で分岐と再同期が頻発する環境において、最小のインタラクションと I/O で LCD の特定と修復を実現することを目的とする。
+
+各値 $v_i$ に適用可能な暗号学的ハッシュ関数 $h$ が定義されている。本論文では、セキュリティパラメータ \(\lambda\) に対して計算量的に原像困難性、第二原像困難性、衝突困難性を満たし、任意の多項式時間攻撃者の成功確率が $\textsf{negl}(\lambda)$ であるような、標準的なハッシュ関数族 $H_\lambda:\{0,1\}^*\to\{0,1\}^\lambda$ を想定する。\(H\) に属するドメイン分離されたハッシュ関数を \(h_A,h_B,\ldots\) のように表記する。 
+
+この設定のもと、我々は（1）\textbf{最新から過去への探索を対数段数で保証}し、（2）\textbf{距離の確率分布が二項分布に従うこと}を示し、（3）\textbf{分岐検出・部分転送・修復}の各手順に対する\textbf{計算／通信上界}を与える。特に、追記偏重ワークロードでは差分が最新近傍に集中するため、期待コストが\textbf{最新側のハミング距離}で支配される\emph{非対称}な性能特性が得られる。
+
+\subsection{本研究の貢献}
+本研究は、効率的な分岐検出 (差異位置検出) が可能な追記最適化されたデータ構造である Slate を提案する。Slate は以下に述べる技術的な貢献により、既存の Merkle Tree およびその亜種である History Tree の手法を拡張する:
+
+\begin{enumerate}
+  \item \textbf{追記最適化ハッシュツリーの導入}: 従来の Merkle Tree が静的なデータセットに対する完全性検証に特化していたのに対し、本研究では追記操作に最適化された動的なログ構造への拡張を実現した。これにより、History Tree と類似する成長パターンを持ちながら、追記に適した構成を明確に定義し、効率的な差分検出と直列化を可能にする新しいハッシュツリーの構造を確立した。
+  \item \textbf{時間局所性に基づくアクセス効率の最適化}: ハミング距離の上限 $c_u(x)\sim\log (n-x)$ と下限 $c_\ell(x)\sim h-\log x$ を数学的に定義し、この境界に従い、最新近傍で I/O 効率が高く、最悪ケースでも通常の二分木探索と同等な木構造を開発した。この結果、最新データへのアクセスが $O(1)$ で、最新から離れるにつれて $O(\log(n-x))$ で増加し、最悪ケースでも $O(\log n)$ 回の I/O 操作で完了する非対称アクセス特性を開発し、ログの分岐点の特定を従来の $O(n)$ から $O(\log n)$ に改善した。
+  \item \textbf{部分永続的データ構造の効率的なエンコード}: 部分永続化の効率的なバージョン階層を 2 進数展開として自然にエンコードする手法を確立し、Driscoll ら \cite{driscoll1986} の一時的な永続化手法で必要とされていた複雑なポインタ管理やバージョンスタンプを排除した。各世代 $i$ で追加されるノードを単一のエントリ $e_i$ に集約ことで、シンプルかつ効率的な部分永続化を実現した。
+  \item \textbf{並行アクセスの安全性保証}: 永続的データ構造の特徴を利用し、SWMR (Single-Write/Multi-Read) 並行実行モデルに基づく安全な並行アクセスを可能にした。これは、スナップショット一貫性により、複数の読み取り操作が単一の追記操作と競合なく並行実行できることを保証する (切り詰め操作を採用する場合でも、コミット指標の保護領域では並行実行可能であることを示す)。
+  \item \textbf{決定論的な木構造の構築アルゴリズム}: 葉ノード数 $n$ の 2 進数展開 $n=\sum_{h\ge 0}b_h 2^h$ に基づく決定論的な構築手法を確立し、同一データに対して常に同一の木構造が生成されることを保証した。
+  \item \textbf{効率的な直列化形式}: 追記操作が単一のファイル追記で完結する直列化形式を設計し、二次記憶装置への I/O を最小化した。空間複雑性を $\Theta(n\log n)$ におさえながら、実用的な性能を達成した。
+
+\end{enumerate}
+% \textbf{分散同期の計算量改善} RaftのログレプリケーションやGitの分岐点検出において、従来のO(n)線形探索をO(log n)に改善する理論的基盤を提供した。 
+% \textbf{実装効率を考慮したビット演算の活用} popcount、clz、ctzなどのCPU命令を活用した効率的な実装手法を体系化し、理論と実装のギャップを最小化した。 
+% \textbf{階層的なデータ管理の新しいパラダイム} LSM-TreeやStratified B-Treeとは異なる、時間的局所性を空間的局所性に変換する新しい階層化手法を確立した。 
+% \textbf{トランザクションログへの実用的な適用} WAL（Write-Ahead Logging）、ブロックチェーン、分散バージョン管理システムなど、実用的なシステムへの適用可能性を示した。 
+
+これらの貢献により、 本研究は従来の Merkle Tree および History Tree を拡張し、理論的な優位性と実装の実用性を両立する新しいデータ構造を確立した。これは分散システムにおける効率的なログ同期と検証に適用可能な新しい基盤技術を提供する。
+
+
+\section{Preliminaries}
+
+\subsection{Merkle Tree}
+
+典型的な Merkle Tree \cite{merkle1989} は完全二分木であり、すべてのノードはそのノードを根とする部分木のダイジェストを表すハッシュ値を持つ。各葉ノードは葉に含まれるデータ要素 $d_i$ のハッシュ値 $H(d_i)$ をハッシュ値として持つ。各中間ノード $b_{i,j}$ は 2 つの子ノードのハッシュ値の連結から計算されたハッシュ値 $H(l.hash\,||\,r.hash)$ を持つ。各要素に対する包含証明 (inclusion proof) を生成するための時間計算量および空間計算量は共に $O(\log n)$ である。
+
+\subsection{History Tree}
+
+History Tree \cite{crosby2009} は要素の動的な追加操作をサポートするように拡張した Merkle Tree の亜種である。この木構造は 1 つ以上の完全二分部分木と、それらを連結するノードで構成されている。ここで最も高い完全二分部分木を最左に、高さの降順で左から右に並んでいるものとする。History Tree に追加される新しいデータは、まず木構造の最も右の葉ノードとして配置され、これを高さ $h=0$ の完全二分部分木とみなす。次に、左の 2 つの木構造を接続する中間ノードを再帰的に構築する。この過程で、複数の完全二分部分木が統合され 1 つの完全二分部分木となることがある。この追加操作は $O(\log n)$ で完了する。
+
+\subsection{Hash Function}
+
+Slate では Merkle Tree における第二原像攻撃を防止する目的で木の各高さごとにドメイン分離したハッシュ関数を使用する。本論文では原像耐性、第二原像耐性、衝突耐性を持つ一般的な暗号論的ハッシュ関数 $\mathcal{H}:\{0,1\}^*\to\{0,1\}^\lambda$ を仮定する。ここで $\lambda$ はハッシュ出力のビット長である。Slate で使用するハッシュ関数 $H_d$ を $\mathcal{H}$ から $d$ でドメイン分離された関数と定義する。これは、具体的には、ドメイン識別子 $d \in \{0,1\}^*$ を用いて $H_d(m) = \mathcal{H}(d\,||\,m)$ と派生したハッシュ関数と考えて良い。ここで $||$ はビット列の連結演算子を表す。
+
+\subsection{Temporal Locality}
+
+時間的局所性 (temporal locality) とは、時刻 $t$ にアクセスされたデータ要素が時刻 $t+\Delta t$ においても高い確率でアクセスされる性質を指す。例えば Web リクエストにおいては時間経過に対し重尾 (tail-heavy) な対数正規分布なることが知られており \cite{almeida1996, barford1998}、ブロックチェーンのような append-only のデータ構造においても最近追加されたデータが次にアクセスされる要素である確率が重尾 (heavy-tailed) な分布、特にパレート分布やべき乗則に従うことが知られている \cite{sornette2025}。これは、最近追加されたデータを優先的にキャッシュするデータ構造を用いることでキャッシュ効率や I/O 性能を改善できることを示唆している。
+
+\subsection{Hamming distance}
+
+2 つの $n$ ビット列 $x,y \in \{0,1\}^n$ のハミング距離 (Hamming distance) $d_H(x,y)$ は異なるビットの数として定義される。これは式 (\ref{eq_hamming_distance}) に示すように XOR 演算と \textrm{popcount} CPU 命令により効率的に計算できる。
+
+\begin{equation}
+d_H(x,y) = |\{i: x_i \ne y_i\}| = \mathrm{popcount}(x \oplus y)
+\label{eq_hamming_distance}
+\end{equation}
+
+完全二分木に含まれる 2 つの葉のインデックス $i,j \in \{0,1,\ldots\}$ のハミング距離 $d_H$ は、それらの葉ノードの最小共通祖先 (lowest common ancestor) の高さを決定する。具体的には、最小共通祖先はルートから深さ $\lfloor \log_2 (i \oplus j) \rfloor$ に位置する。例えば、インデックス $i=5=101_2$ と $j=7=111_2$ の場合、$i \oplus j = 010_2$ より、最小共通祖先は深さ 1 にあり、両方の葉ノードは高さ 2 の部分木内に存在する。
+
+\subsection{Terminology}
+Stratified Structure (persistent structure, eigentree),
+Hamming distance bound,
+Leveled cache
+
+\section{Slate: Structural Algorithm}
+\subsection{Data Structure}
+- Stratified構造の定義
+  * レベル分けの論理（なぜstratifiedか）
+  * 各レベルの役割と特性
+- ツリー構造の詳細
+  * ノード構成
+  * ハッシュ計算方法
+\subsection{Basic Operations}
+- Append(element) → commitment
+  * アルゴリズム詳細（pseudocode）
+  * レベル間の遷移ロジック
+- Verify(element, proof) → boolean
+- GenerateProof(element) → proof
+\subsection{Complexity Analysis}
+- Append: O(1) with cache, O(log n) worst case
+- Verify: O(log n)
+- Space: O(log n) for roots, O(n log n) for full tree
+\subsection{Correctness}
+- Proposition 1: Append操作の正しさ
+- Proposition 2: 一貫性証明の健全性
+- 簡潔な証明スケッチ
+
+参考： Champine論文のAlgorithm 1, 2のような明確なpseudocodeを提供。Utreexo論文のような視覚的な図解も効果的です。
+
+\subsection{Problem Statement}
+\subsection{Slate Structure}
+\subsection{Properties}
+
+\section{(Temporal Locality Optimization}
+\subsection{Hamming Distance-based Access Pattern}
+- 定義：ハミング距離とアクセス効率の関係
+- Proposition 3: I/Oアクセスパターンの幾何分布
+- 証明：数式とともに
+- 視覚化：アクセス頻度の分布図
+\subsection{Leveled Gradual Cache Strategy}
+- 各レベルのキャッシュポリシー
+- メモリとI/Oのトレードオフ分析
+- 最適なキャッシュサイズの決定
+\subsection{Snapshot Isolation}
+- 並行操作のサポートメカニズム
+- MVCC-like semantics
+- 一貫性保証の証明
+
+参考： Utreexo論文のSection 5のように、最適化テクニックを実用的な観点から説明。ただし、理論的な裏付けも提供。
+
+\section{Experimental Results}
+\subsection{AWS Deployment}
+\subsection{Performance Evaluation}
+\subsection{Implementation}
+- 実装環境（AWS EC2, Ubuntu, etc.）
+- ベンチマーク設定
+- データセット（real-world workloads）
+\subsection{Performance Evaluation}
+- Append throughput
+  * キャッシュあり/なしの比較
+  * スループット vs メモリ使用量
+- Verification performance
+- Memory consumption
+\subsection{Comparative Analysis}
+- vs History Tree
+- vs Merkle Search Trees
+- vs Prolly Trees
+- 表形式での比較（Table: Comparative Performance）
+\subsection{workload-Specific Results}
+- WAL scenario
+- Blockchain scenario  
+- Version control scenario
+
+参考： Crosby論文のTable 2のような明確な性能比較表。Utreexo論文のFigure 4のようなグラフで視覚化。
+
+\section{Discussion}
+展開の流れ：
+- 結果の解釈：なぜSlateが優れているか
+- 適用可能なユースケース：どんなシステムに向いているか
+- トレードオフ：
+   - メモリ vs I/O
+   - 追記性能 vs 検証性能
+- シンプルさ vs 最適性
+- 限界と制約：
+   - ランダムアクセスには不向き
+   - 削除操作の複雑さ（もし実装していないなら）
+- 実装の考慮事項：
+   - プロダクション環境での注意点
+   - チューニングパラメータ
+
+\subsection{Related Work}
+- Merkle Tree Variants
+- Binary Numeral Trees
+- Authenticated Data Structures
+- Log-Structured Storage
+
+\section{Conclusion}
+- 貢献の再確認（3つのkey contributionsを再度）
+- 理論的意義：時間的局所性の形式化と証明
+- 実用的意義：実世界のワークロードでの性能改善
+- 今後の方向性：
+   - 削除操作の最適化
+   - より強力な暗号プリミティブ
+   - 他の分散システムへの適用
+- 実装の公開（GitHub URL）
+
+
 \subsection{背景：ハッシュツリーの応用と課題}
 \subsection{追記最適化の必要性}
 \subsection{本研究の目的と貢献}
@@ -79,11 +277,48 @@
 \subsection{応用拡張：分散同期・検証アルゴリズム}
 \subsection{今後の研究課題}
 
-\section*{参考文献}
+\newpage
+
+\bibliographystyle{IEEEtran}  % IEEE 形式（番号式）
+\bibliography{refs}            % 参照する .bib ファイル名（拡張子不要）
 
 \appendix
-\section{擬似コード}
-\section{証明補足}
-\section{評価スクリプトとデータセット概要}
+
+\newpage
+\section{ビット演算と CPU 命令への変換}
+
+Slate の構造は二分木に基づいており、その数学的な表現において 2 のべき乗や余剰の演算が頻繁に現われる。これらは汎用プログラミング言語の多くがサポートする単純な四則演算、ビット演算、および CPU 命令を用いて高速に算出することができる。数式表記との対応表を Table \ref{table:cpu_instruction} に示す。
+
+\begin{table}[h]
+  \centering
+    \begin{tabular}{ll}
+      \textbf{数式表記} & \textbf{ビット演算または CPU 命令} \\
+      \hline
+      $2^j$ & \texttt{1 << j} \\
+      $i \bmod 2^j$ & \texttt{i \& ((1 << j) - 1)} \\
+      $i - (i \bmod 2^j)$ & \texttt{i \& \^{}((1 << j) - 1) = (i >> j) << j} \\
+      $\left\lfloor \frac{i}{2^j} \right\rfloor$ & \texttt{i >> j} \\
+      $\left\lceil \frac{i}{2^j} \right\rceil$ & \texttt{(1 + (1 << j) - 1) >> j} \\
+      $\lfloor \log_2 x \rfloor$ & \texttt{ilog2(x)}: $x$ の 2 進数表現で最も左にある 1 の位置。 \\
+      $\lceil \log_2 x \rceil$ & \texttt{ilog2(x - 1)}: $x-1$ の 2 進数表現で最も左にある 1 の位置。 \\
+      $\mathrm{popcount}(x)$ & \texttt{popcnt(x)}: $x$ のビット内に存在する 1 の個数。 \\
+      $\mathrm{trailing\_zeros}(x)$ & \texttt{ctz(x)}: $x$ の最右ビットから連続する 0 の個数。 \\
+      $\mathrm{clz} = 
+        \begin{cases}
+        n - 1 - \lfloor \log_2 x \rfloor & \text{if } x > 0 \\
+        n & \text{if } x = 0
+        \end{cases}$ & \texttt{clz(x)}: $x$ の最左ビットから連続する 0 の個数。 \\
+      $\mathrm{clo}(x)$ & \texttt{clz(\^{}x)}: $x$ の最左ビットから連続する 1 の個数。 \\
+      \hline
+  \end{tabular}
+  \caption{数式表記からビット演算と CPU 命令への変換。}
+  \label{table:cpu_instruction}
+\end{table}
+
+実際の演算においては、例えば $i$ を 64-bit 整数と仮定した場合に $j$ は $0 \le j \le 64$ の範囲を取ることができるため、$j=64$ のケースでオーバーフローを起こす可能性がある。この境界値チェックのために \texttt{if(j < 64)} のような条件分岐を追加する必要があるが、現実的な使用範囲では \texttt{j < 64} は常に \texttt{true} となり、CPU の分岐予測と投機実行に高い予測成功率を期待できるため、追加の境界チェックのオーバーヘッドはほぼ無視できると考えられる。
+
+% \section{擬似コード}
+% \section{証明補足}
+% \section{評価スクリプトとデータセット概要}
 
 \end{document}

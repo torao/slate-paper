@@ -1,0 +1,114 @@
+% [Merkle Tree]
+@inproceedings{merkle1989,
+  title={A certified digital signature},
+  author={Merkle, Ralph C},
+  booktitle={Conference on the Theory and Application of Cryptology},
+  pages={218--238},
+  year={1989},
+  organization={Springer}
+}
+
+% [History Tree]
+@inproceedings{crosby2009,
+  author = {Crosby, Scott A. and Wallach, Dan S.},
+  title = {Efficient data structures for tamper-evident logging},
+  year = {2009},
+  publisher = {USENIX Association},
+  address = {USA},
+  abstract = {Many real-world applications wish to collect tamper-evident logs for forensic purposes. This paper considers the case of an untrusted logger, serving a number of clients who wish to store their events in the log, and kept honest by a number of auditors who will challenge the logger to prove its correct behavior. We propose semantics of tamper-evident logs in terms of this auditing process. The logger must be able to prove that individual logged events are still present, and that the log, as seen now, is consistent with how it was seen in the past. To accomplish this efficiently, we describe a tree-based data structure that can generate such proofs with logarithmic size and space, improving over previous linear constructions. Where a classic hash chain might require an 800 MB trace to prove that a randomly chosen event is in a log with 80 million events, our prototype returns a 3 KB proof with the same semantics. We also present a flexible mechanism for the log server to present authenticated and tamper-evident search results for all events matching a predicate. This can allow large-scale log servers to selectively delete old events, in an agreed-upon fashion, while generating efficient proofs that no inappropriate events were deleted. We describe a prototype implementation and measure its performance on an 80-million-event syslog trace at 1,750 events per second using a single CPU core. Performance improves to 10,500 events per second if cryptographic signatures are offloaded, corresponding to 1.1 TB of logging throughput per week.},
+  booktitle = {Proceedings of the 18th Conference on USENIX Security Symposium},
+  pages = {317–334},
+  numpages = {18},
+  location = {Montreal, Canada},
+  series = {SSYM'09}
+}
+
+% [History Tree]
+@article{ct2021,
+  title={Certificate transparency version 2.0},
+  author={Laurie, Ben and Langley, Adam and Kasper, Emilia and Messeri, Eran and Stradling, Rob},
+  journal={Internet Requests for Comments, RFC Editor, RFC},
+  volume={9162},
+  year={2021}
+}
+
+% [永続的データ構造]
+@inproceedings{driscoll1986,
+  title={Making data structures persistent},
+  author={Driscoll, James R. and Sarnak, Neil, and Sleator, Daniel Dominic, and Tarjan, Robert Endre},
+  booktitle={Proceedings of the eighteenth annual ACM symposium on Theory of Computing},
+  pages={109--121},
+  year={1986}
+}
+
+% [時間的局所性] Bitcoin UTXO の保持期間分布 (寿命) がパレート分布に従うことを数理的解析・実証データの両面から明示。
+% https://ideas.repec.org/a/eee/phsmap/v658y2025ics0378437124008045.html
+@article{sornette2025,
+  title={Transaction flows and holding time scaling laws of bitcoin},
+  author={Sornette, Didier and Zhang, Yu},
+  journal={Physica A: Statistical Mechanics and its Applications},
+  volume={658},
+  pages={130294},
+  year={2025},
+  publisher={Elsevier}
+}
+
+% [時間的局所性]
+@inproceedings{almeida1996,
+  title={Characterizing reference locality in the WWW},
+  author={Almeida, Virgilio and Bestavros, Azer and Crovella, Mark and De Oliveira, Adriana},
+  booktitle={Fourth International Conference on Parallel and Distributed Information Systems},
+  pages={92--103},
+  year={1996},
+  organization={IEEE}
+}
+
+% [時間的局所性] Web アクセスの時間的局所性が対数正規分布でモデル化できるという論文。
+@inproceedings{barford1998,
+  title={Generating representative web workloads for network and server performance evaluation},
+  author={Barford, Paul and Crovella, Mark},
+  booktitle={Proceedings of the 1998 ACM SIGMETRICS joint international conference on Measurement and modeling of computer systems},
+  pages={151--160},
+  year={1998}
+}
+
+% 既存の分散システム ------------------------------
+
+% [Raft]
+@article{ongaro2014raft,
+  author    = {Diego Ongaro and John Ousterhout},
+  title     = {In Search of an Understandable Consensus Algorithm (Raft)},
+  journal   = {USENIX Annual Technical Conference (ATC)},
+  year      = {2014},
+  pages     = {305--319},
+  url       = {https://raft.github.io/raft.pdf}
+}
+
+@inproceedings{balakrishnan2013corfu,
+  author    = {Mahesh Balakrishnan and Dahlia Malkhi and John D. Davis and Vijayan Prabhakaran and Michael Wei and Ted Wobber},
+  title     = {CORFU: A Shared Log Design for Flash Clusters},
+  booktitle = {USENIX Symposium on Networked Systems Design and Implementation (NSDI)},
+  year      = {2013},
+  pages     = {1--14},
+  url       = {https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/balakrishnan}
+}
+
+@inproceedings{kafka2011,
+  title={Kafka: A distributed messaging system for log processing},
+  author={Kreps, Jay and Narkhede, Neha and Rao, Jun and others},
+  booktitle={Proceedings of the NetDB},
+  volume={11},
+  number={2011},
+  pages={1--7},
+  year={2011},
+  organization={Athens, Greece}
+}
+
+@inproceedings{nishtala2013memcache,
+  author    = {Rajesh Nishtala and Hans Fugal and Steven Grimm and Marc Kwiatkowski and Herman Lee and Harry C. Li and Ryan McElroy and Mike Paleczny and Daniel Peek and Paul Saab and Dave Stafford and Tony Tung and Venkateshwaran Venkataramani},
+  title     = {Scaling Memcache at Facebook},
+  booktitle = {USENIX Symposium on Networked Systems Design and Implementation (NSDI)},
+  year      = {2013},
+  pages     = {385--398},
+  url       = {https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala}
+}
