@@ -116,11 +116,20 @@ d_H(x,y) = |\{i: x_i \ne y_i\}| = \mathrm{popcount}(x \oplus y)
 
 \subsection{Terminology}
 Stratified Structure (persistent structure, eigentree),
-Hamming distance bound,
 Leveled cache
 
 \section{Slate: Structural Algorithm}
+
+本セクションでは Slate の構造的特徴と基本操作を形式的に定義する。Slate は History Tree に基づいており、最近追加されたデータとそれに関連するノードが局所化され末尾に追記される直列化形式に特徴を持つ。木構造はその多くの領域が完全二分部分木 (PSBT) で構成されている。最近追加された新しいデータは上層の小さな PSBT に配置され、古いデータは徐々に下層の PSBT にマージされる。この構造により、append 操作に $O(1)$ の I/O、get 操作にはハミング距離に応じた幾何分布的な I/O コストを持つようになる。
+
+以下、データ構造の定義（3.1節）、基本操作（3.2節）、計算複雑度の解析（3.3節）、正しさの証明（3.4節）の順に説明する。
+
 \subsection{Data Structure}
+
+本論文では $n$ 子のユーザデータ (葉ノード) を含む Slate の木構造全体を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代と表現する。また、便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
+
+Slate は部分構造として含まれている一つ以上の PSBT を統合しながら成長する。木構造の大半が完全二分木であることから、完全二分木に近い性質を持つ。
+
 - Stratified構造の定義
   * レベル分けの論理（なぜstratifiedか）
   * 各レベルの役割と特性
@@ -141,6 +150,13 @@ Leveled cache
 - Proposition 1: Append操作の正しさ
 - Proposition 2: 一貫性証明の健全性
 - 簡潔な証明スケッチ
+\subsection{構造的アルゴリズムの概念}
+\subsection{層化 (stratification) と追記の形式的定義}
+\subsection{ノード配置とハッシュ計算規則}
+\subsection{Slate の生成過程と更新手順}
+\subsection{計算量と記憶効率の理論的解析}
+
+
 
 参考： Champine論文のAlgorithm 1, 2のような明確なpseudocodeを提供。Utreexo論文のような視覚的な図解も効果的です。
 
@@ -232,13 +248,6 @@ Leveled cache
 \subsection{ブロックチェーン・分散ログ・同期アルゴリズムへの応用}
 \subsection{既存手法の問題点：対称性と時間的局所性の欠如}
 \subsection{本研究の新規性}
-
-\section{Stratified Hash Tree の設計原理}
-\subsection{構造的アルゴリズムの概念}
-\subsection{層化 (stratification) と追記の形式的定義}
-\subsection{ノード配置とハッシュ計算規則}
-\subsection{Slate の生成過程と更新手順}
-\subsection{計算量と記憶効率の理論的解析}
 
 \section{距離分布と探索特性}
 \subsection{最新エントリからのハミング距離の定義}
