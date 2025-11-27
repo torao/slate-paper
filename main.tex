@@ -1,15 +1,18 @@
-\documentclass[a4paper,11pt]{article}
+\documentclass[xelatex,ja=standard,a4paper,11pt]{bxjsreport}
 
 \usepackage{geometry}
 \geometry{margin=25mm}
 \usepackage{titlesec}
 \usepackage{setspace}
 \usepackage{hyperref}
-\usepackage{pxjahyper}
+% \usepackage{pxjahyper}
 \usepackage{indentfirst}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsfonts}
+\usepackage[dvipdfmx]{graphicx}
+% \usepackage{fontspec}
+% \setmainfont{Noto Serif CJK JP}
 \usepackage[tableposition=bottom]{caption}
 \setstretch{1.2}
 
@@ -129,6 +132,12 @@ Leveled cache
 本論文では $n$ 子のユーザデータ (葉ノード) を含む Slate の木構造全体を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代と表現する。また、便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
 
 Slate は部分構造として含まれている一つ以上の PSBT を統合しながら成長する。木構造の大半が完全二分木であることから、完全二分木に近い性質を持つ。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[scale=.50]{fig/t22-structure-sketch.pdf}
+  \caption{説明文}
+\end{figure}
 
 - Stratified構造の定義
   * レベル分けの論理（なぜstratifiedか）
