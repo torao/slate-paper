@@ -129,14 +129,15 @@ Leveled cache
 
 \subsection{Data Structure}
 
-本論文では $n$ 子のユーザデータ (葉ノード) を含む Slate の木構造全体を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代と表現する。また、便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
+本論文では $n$ 個のユーザデータ (葉ノード) を含む Slate の木構造全体を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代と表現する。また、便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
 
 Slate は部分構造として含まれている一つ以上の PSBT を統合しながら成長する。木構造の大半が完全二分木であることから、完全二分木に近い性質を持つ。
 
-\begin{figure}[h]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[scale=.50]{fig/t22-structure-sketch.pdf}
-  \caption{説明文}
+  \includegraphics[scale=.6]{fig/t22-structure-sketch.pdf}
+  \caption{$T_{22}$ の木構造: 2進数表現と完全部分二分木の対応}
+  \label{fig:t22}
 \end{figure}
 
 - Stratified構造の定義
