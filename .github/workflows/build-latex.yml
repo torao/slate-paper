@@ -1,0 +1,95 @@
+name: Build XeLaTeX PDF
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.tex'
+      - '**.bib'
+      - 'figures/**'
+      - 'images/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install TeX Live and Japanese Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-xetex \
+            texlive-latex-extra \
+            texlive-fonts-extra \
+            texlive-lang-japanese \
+            texlive-lang-cjk \
+            texlive-bibtex-extra \
+            biber \
+            fonts-noto-cjk \
+            texlive-publishers \
+            fonts-noto-cjk-extra \
+            fonts-noto-mono \
+            latexmk
+          
+          # フォントキャッシュの更新
+          fc-cache -fv
+
+      - name: Verify IEEEtran.bst availability
+        run: |
+          kpsewhich IEEEtran.bst || {
+            echo "ERROR: IEEEtran.bst not found"
+            echo "Installing from CTAN..."
+            wget -q http://mirrors.ctan.org/macros/latex/contrib/IEEEtran/bibtex/IEEEtran.bst
+            mkdir -p ~/texmf/bibtex/bst/IEEEtran
+            mv IEEEtran.bst ~/texmf/bibtex/bst/IEEEtran/
+            texhash ~/texmf
+          }
+      
+      - name: Verify Japanese Font Installation
+        run: |
+          fc-list :lang=ja | grep -i "noto" || echo "Warning: Noto CJK fonts may not be properly installed"
+      
+      - name: Compile with XeLaTeX
+        run: |
+          latexmk \
+            -xelatex \
+            -synctex=1 \
+            -interaction=nonstopmode \
+            -file-line-error \
+            -halt-on-error \
+            main.tex
+      
+      - name: Prepare PDF for deployment
+        run: |
+          mkdir -p dist
+          cp main.pdf dist/
+          
+          # ビルド情報の追加
+          cat > dist/README.md <<EOF
+          # PDF Build Information
+          
+          - **Built at**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Commit**: [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${GITHUB_SHA})
+          - **Branch**: ${{ github.ref_name }}
+          - **Workflow**: [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ## Download
+          
+          [📄 main.pdf](./main.pdf)
+          EOF
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          enable_jekyll: false
+          force_orphan: true
+
