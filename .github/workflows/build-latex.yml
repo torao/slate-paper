@@ -9,6 +9,7 @@ on:
       - '**.bib'
       - 'figures/**'
       - 'images/**'
+      - '.github/workflows/build-latex.yml'
 
 permissions:
   contents: write
@@ -21,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Install TeX Live and Japanese Fonts
+      - name: Install TeX Live and Fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -36,7 +37,9 @@ jobs:
             texlive-publishers \
             fonts-noto-cjk-extra \
             fonts-noto-mono \
-            latexmk
+            latexmk \
+            texlive-lang-chinese \
+            texlive-fonts-recommended
           
           # フォントキャッシュの更新
           fc-cache -fv
@@ -65,31 +68,50 @@ jobs:
             -file-line-error \
             -halt-on-error \
             main.tex
-      
-      - name: Prepare PDF for deployment
-        run: |
-          mkdir -p dist
-          cp main.pdf dist/
-          
-          # ビルド情報の追加
-          cat > dist/README.md <<EOF
-          # PDF Build Information
-          
-          - **Built at**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          - **Commit**: [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${GITHUB_SHA})
-          - **Branch**: ${{ github.ref_name }}
-          - **Workflow**: [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          
-          ## Download
-          
-          [📄 main.pdf](./main.pdf)
-          EOF
-      
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          enable_jekyll: false
-          force_orphan: true
 
+      - name: Verify and rename PDF
+        run: |
+          if [ ! -f main.pdf ]; then
+            echo "Error: main.pdf not found in artifact"
+            ls -la
+            exit 1
+          fi
+          cp main.pdf slate-SNAPSHOT.pdf
+          ls -lh slate-SNAPSHOT.pdf
+
+      - name: Delete existing SNAPSHOT release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete SNAPSHOT --yes 2>/dev/null || true
+          # API反映待機 (削除直後の作成で409 Conflictを避ける)
+          sleep 3
+
+      - name: Delete and recreate SNAPSHOT tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # リモートタグ削除（エラーは無視）
+          git push origin :refs/tags/SNAPSHOT 2>/dev/null || true
+          
+          # ローカルタグ削除→再作成
+          git tag -d SNAPSHOT 2>/dev/null || true
+          git tag SNAPSHOT ${{ github.sha }}
+          
+          # リモートにプッシュ（強制）
+          git push origin SNAPSHOT
+
+      - name: Create SNAPSHOT release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create SNAPSHOT \
+            slate-SNAPSHOT.pdf \
+            --title "Latest Snapshot" \
+            --notes "**Commit:** \`${{ github.sha }}\`
+          **Built:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          **Workflow Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          
+          This is an automated latest snapshot."
