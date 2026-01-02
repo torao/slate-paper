@@ -10,11 +10,17 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsfonts}
+\usepackage{amsthm}
 \usepackage[dvipdfmx]{graphicx}
 % \usepackage{fontspec}
 % \setmainfont{Noto Serif CJK JP}
 \usepackage[tableposition=bottom]{caption}
 \setstretch{1.2}
+\newtheorem{definition}{定義}[section]
+\newtheorem{proposition}{命題}[section]
+\newtheorem{theorem}{定理}[section]
+\newtheorem{lemma}{補題}[section]
+% \newtheorem{proof}{Proof}[section]
 
 \title{Slate: 分散ログ同期のための追記最適化マークルツリー}
 % \title{Slate: An Append-Optimized Hash Tree for Distributed-Log Synchronization}
@@ -100,7 +106,16 @@ History Tree \cite{crosby2009} は要素の動的な追加操作をサポート�
 
 \subsection{Hash Function}
 
-Slate では Merkle Tree における第二原像攻撃を防止する目的で木の各高さごとにドメイン分離したハッシュ関数を使用する。本論文では原像耐性、第二原像耐性、衝突耐性を持つ一般的な暗号論的ハッシュ関数 $\mathcal{H}:\{0,1\}^*\to\{0,1\}^\lambda$ を仮定する。ここで $\lambda$ はハッシュ出力のビット長である。Slate で使用するハッシュ関数 $H_d$ を $\mathcal{H}$ から $d$ でドメイン分離された関数と定義する。これは、具体的には、ドメイン識別子 $d \in \{0,1\}^*$ を用いて $H_d(m) = \mathcal{H}(d\,||\,m)$ と派生したハッシュ関数と考えて良い。ここで $||$ はビット列の連結演算子を表す。
+Slate では Merkle Tree における第二原像攻撃を防止する目的でノードの高さ $j$ ごとにドメイン分離したハッシュ関数を使用する。本論文では原像耐性、第二原像耐性、衝突耐性を持つ一般的な暗号論的ハッシュ関数 $\mathcal{H}:\{0,1\}^*\to\{0,1\}^\lambda$ を仮定する。ここで $\lambda$ はハッシュ出力のビット長である。Slate では $\mathcal{H}$ からドメイン $j$ で分離されたハッシュ関数 $h_j$ を使用する。これは、具体的には、高さ $j$ を入力の接頭辞として用いたハッシュ関数 $h_j(m) = \mathcal{H}(j\,||\,m)$ を使用できる。ここで $||$ はビット列の連結演算子を表している。
+
+\subsection{Log Structure}
+
+本論文では、すべてのデータが時系列順に末尾へのみ追記され、一度記録されたデータは不変となる追記専用 (append-only) のデータ構造を\textbf{ログ構造} (log structure) とする。$\mathbb{N}$ を自然数全体の集合 $\{1,2,\ldots\}$、$\mathbb{N}_0$ を非負値 $\mathbb{N} \cup \{0\}$ としたとき、離散インデックス $i \in \mathbb{N}$ と値集合 $V$ に対し、ログ (log) $L$ は長さ $n \in \mathbb{N}_0$ を持つ有限列 (\ref{eq:log-structure}) として定義する。
+\begin{equation}
+    L = \langle x_1, x_2, \ldots, x_n \rangle, \quad x_i \in V, i \in \mathbb{N}
+    \label{eq:log-structure}
+\end{equation}
+単なる順序付きデータ列とは異なり、ログ構造では既存のデータの変更や任意の位置への挿入・削除を許さないことを示唆しており、履歴の完全性と監査可能性が構造的に保証される。
 
 \subsection{Temporal Locality}
 
@@ -129,18 +144,19 @@ Leveled cache
 
 \subsection{Data Structure}
 
-Slate は History Tree \cite{crosby2009} に基づいた追記操作が可能な Merkle Tree \cite{merkle1989} の亜種であり、その二分木の葉ノードをそれぞれ 1 つのデータに対応させることで順序付きの列を表現する。本論文では $n$ 個の葉ノード (つまり $n$ 個のデータ) で構成される木構造を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代の木と表現する。ここで $T_0 = \emptyset$ である。便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
+Slate は History Tree \cite{crosby2009} に基づいた追記操作が可能な Merkle Tree \cite{merkle1989} であり、その葉ノードをそれぞれ 1 つのデータに対応させることで順序付きのデータ列を表現する。本論文では $n$ 個の葉ノードを持つ木構造を $T_n$ と表記し、特に $T_n$ の成長過程に注目するとき $n$-世代の木と表現する。ここで $T_0 = \emptyset$ である。便宜上、あるノード $b$ が木構造 $T$ に含まれていることを $b \in T$ と表記し、$T_1$ が $T_2$ の部分木であることを $T_1 \subseteq T_2$ と表記する。
 
 \textbf{添字}: $i \in \mathbb{N}$ を 1 から始まる自然数とし、$i-1$ 世代の木構造 $T_{i-1}$ に $i$ 番目のデータ $d_i$ を追加 (統合) するために発生するノードを $b_{i,j}$ とする。$j$ は $b_{i,j}$ をルートとする部分木の中で最も\textit{遠い}葉ノードまでのホップ数、つまり $b_{i,j}$ の高さを表している。$i$ と $j$ はそれぞれ式 (\ref{eq:ij}) のように表すことができる。
 \begin{equation}
 i \in \{1,2,\ldots\}: 0 \le j \le \left\lceil \log_2 i \right\rceil
 \label{eq:ij}
 \end{equation}
-$j=0$ は葉ノードのケースであり、$b_{i,0}=b_i$ と表す。また、$T_n$ に含まれる任意のノード $b_{i,j}$ をルートとする部分木を $T_{i,j} \subseteq T_n$ と表す。
+$j=0$ は葉ノードのケースであり、$b_{i,0}=b_i$ と表す。また、$T_n$ に含まれる任意のノード $b_{i,j}$ をルートとしてすべての子孫ノードを含む部分木を $T_{i,j} \subseteq T_n$ と表す。
 
-\textbf{完全二分木}: 本論文は木構造が完全二分木 (perfect binary tree) であることを強調するために記号 $'$ を用いる。$T'_n$ は $n$ 世代目の木構造が完全二分木であることを意味する。また $T'_{i,j}$ は部分木 $T_{i,j}$ が完全二分木であることを意味し、このとき $T'_{i,j}$ のルートを $b'_{i,j}$ と表す。
+\textbf{完全二分木}: 本論文は木構造が完全二分木 (perfect binary tree) であることを強調するために $'$ 記号を用いる。$T'_n$ は $n$ 世代目の木構造が完全二分木であることを意味する。また $T'_{i,j}$ は部分木 $T_{i,j}$ が完全二分木であることを意味し、このとき $T'_{i,j}$ のルートを $b'_{i,j}$ と表す。
 
-\textbf{部分的永続データ構造}: Slate の木は部分的永続データ構造 \cite{driscoll1986} (partially persisten data structure) である。$T_n$ に含まれる任意の完全二分部分木のルートノード $b'_{i,j}$ は永続性 (persistent) を持つ。つまり、$m > n$ となるような $n$ 以降のすべての世代の木 $T_m$ においても同じノード $b'_{i,j}$ が存在し続ける。ノード $b_{i,j}$ をルートとする部分木が完全二分木ではない場合、$b_{i,j}$ はその世代に限り存在する一過性 (ephemeral) であり、それ以降の世代では木構造に現われることはない。
+\subsubsection{部分的永続データ構造}
+Slate の木は関数型プログラミングの文脈で部分的永続データ構造 \cite{driscoll1986} (partially persisten data structure) である。任意の完全二分部分木のルートノード $b'_{i,j} \in T_n$ は\textbf{永続性} (persistent) を持つ。つまり $n$ 以降のすべての世代の木 $T_m$ においても同じノード $b'_{i,j}$ が存在し続ける。ノード $b_{i,j}$ をルートとする部分木が完全二分木ではない場合、$b_{i,j}$ はその世代に限り存在する\textbf{一過性} (ephemeral) であり、それ以降の世代では木構造に現われることはない。
 
 $T_n$ に含まれる任意のノード $b_{i,j}$ が永続性ノードかどうか、言い換えると、$b_{i,j}$ をルートとする部分木が完全二分木かどうかは式 (\ref{eq:persistent_node}) で評価することができる。
 \begin{equation}
@@ -150,89 +166,515 @@ $T_n$ に含まれる任意のノード $b_{i,j}$ が永続性ノードかどう
     \end{cases}
     \label{eq:persistent_node}
 \end{equation}
-すべての葉ノード $b_{i,0}$ は $i \bmod{2^0} = 0$ であることから永続性ノードである。
+すべての葉ノード $b_{i,0}$ は $i \bmod{2^0} = 0$ であることから永続性ノードであることは明らかである。
 
-\textbf{エントリ}: $i$ 番目のデータ $d_i$ を木に追加するときに発生する追加の構造を\textbf{エントリ} (entry) と呼び $e_i$ で表す。$e_i$ はデータ $d_i$ とそれを木と結合するノード集合 $\{b_i,b_{i,j_1},b_{i,j_2},\ldots\}$ で構成されている。$e_i$ に含まれるノード $b_{i,j}$ の添字 $i$ はすべて同じであるため、ここでは $e_i$ を構成するノードの添字 $j$ を求める。
+木構造 $T_n$ は、互いに独立した (部分構造の関係にない) 部分木の中で最大と見なされる完全二分木の集合で構成されている。本論文では、そのような完全二分部分木を\textbf{層別木} (stratum tree) と呼ぶ。
+
+\subsubsection{エントリ}
+木構造への追記操作 $T_{i-1} \overset{d_i}{\to} T_i$ の過程で新規に計算されるノードの集合を\textbf{エントリ} (entry) と定義し $e_i$ で表す。$e_i$ に含まれるすべてのノードの添字 $i$ (世代番号) はすべて同じであることに注意。ここで $e_i$ を構成するノードの添字 $j$ を求める。
 
 $i$ の 2 進数表現に対し、最右桁から連続する $0$ の個数を得る関数を $\mathrm{ctz}(i)$ とする。言い換えると $\mathrm{ctz}(i)$ は $i$ の最も右に位置する $1$ の位置を意味している。$i$ の 2 進数表現において、$0$ から $\mathrm{ctz}(i)$ 桁は永続性ノードを表しており、$\mathrm{ctz}(i) + 1$ 桁以降に現われる $1$ は一過性ノードを表している。それぞれ $j$ の集合に変換すると式 (\ref{eq:ejp}) と (\ref{eq:eje}) のようになる。
 \begin{eqnarray}
     \mathcal{J}'(i) & = & \{\mathrm{ctz}(i), \mathrm{ctz}(i)-1, \ldots, 0\} \label{eq:ejp} \\
     \mathcal{J}(i) & = & \left\{ p + 1 \,\left|\, p \in \mathbb{N}_0, \left\lfloor \frac{i}{2^p} \right\rfloor \bmod 2 = 1, p > \mathrm{ctz}(i) \right.\right\} \label{eq:eje}
 \end{eqnarray}
-$\mathcal{J}'$ と $\mathcal{J}$ はそれぞれ永続性ノードと一過性ノードに割り当てられる添字 $j$ を区別している。これより、エントリ $e_i$ は式 (\ref{eq:eij}) のように表すことができる。
+$\mathcal{J}'$ と $\mathcal{J}$ はそれぞれ永続性ノードと一過性ノードを区別している。これより、エントリ $e_i$ は式 (\ref{eq:eij}) のように表すことができる。
 \begin{equation}
     e_i = \{ b'_{i,j} \mid j \in \mathcal{J}'(i) \} \cup \{b_{i,j} \mid j \in \mathcal{J}(i)\}
     \label{eq:eij}
 \end{equation}
-\textbf{木構造の構築}: Slate は、独立した (互いに部分構造ではない) 完全二分木を一世代限りの一過性ノードで接続して決定論的な木を構築する。図 \ref{fig:t22} は $n=22$ の木構造 $T_{22}$ を表しており、3 つの完全二分部分木 $T'_{16,4}, T'_{20,2}, T'_{22,1}$ を 2 つの一過性ノード $b_{22,5},b_{22,3}$ で接続して木を成している様子を表している。
+$e_n$ の空間計算量および構築にかかる時間計算量は共に $O(\log_2 n)$ である。
+後述するように、エントリは直列化形式においての保存単位であり、時間的局所性を空間的局所性に変換する、本論文において重要なパーツである。
 
-$T_n$ に含まれる完全二分部分木の数は $n$ の 2 進数表現での 1 の個数 $\mathrm{popcount}(n)$ に等しく、ぞれぞれの完全二分部分木の高さ $j$ は、$n$ の 2 進数表現において対応する 1 が現われる位置と等しい (最右ビットの位置を 0 とする)。高さ $j$ の完全二分木は $2^j$ 個の葉ノードを含んでいることから、$n$ は式 (\ref{eq:n}) のように各完全二分部分木の葉ノード数の和で表すことができる。
+\subsubsection{木構造の構築}
+Slate は、それぞれの層別木を一世代限りの一過性ノードで接続して決定論的な木を構築する。図 \ref{fig:t22} は $n=22$ の木構造 $T_{22}$ を表しており、3 つの層別木 $T'_{16,4}, T'_{20,2}, T'_{22,1}$ を 2 つの一過性ノード $b_{22,5},b_{22,3}$ で接続して木を成している様子を表している。
+
+$T_n$ に含まれる層別木の数は $n$ の 2 進数表現での 1 の個数 $\mathrm{popcount}(n)$ に等しく、ぞれぞれの層別木の高さ $j$ は、$n$ の 2 進数表現において対応する 1 が現われる位置と等しい (最右桁の位置を 0 とする)。高さ $j$ の完全二分木は $2^j$ 個の葉ノードを含んでいることから、$n$ は式 (\ref{eq:n}) のようにそれぞれの層別木の葉ノード数の和で表すこともできる。
 \begin{equation}
 n = \sum_{j \ge 0} \alpha_j\,2^j \quad (\alpha_j \in \{0,1\})
 \label{eq:n}
 \end{equation}
-ここで $\alpha_j$ は $n$ の 2 進数表現の $j$ 桁目の値を意味する。これより $T_n$ に含まれる完全二分部分木の各ルートノードの集合 $\mathcal{B}'_n$ は式 \ref{eq:pbst_roots} のように表すことができる。
+ここで $\alpha_j$ は $n$ の 2 進数表現の $j$ 桁目の値を意味する。これより $T_n$ に含まれる各層別木のルートノードの集合 $\mathcal{B}'_n$ は式 (\ref{eq:pbst_roots}) のように表すことができる。
 \begin{equation}
-\mathcal{B}'_n = \left\{b_{i,j},i=\left\lfloor\frac{n}{2^j}\right\rfloor\cdot2^j\,\left|\, j \in \mathbb{N}_0,  
-  \left\lfloor\frac{n}{2^j}\right\rfloor \bmod{2} = 1 \right.\right\} 
+\mathcal{B}'_n = \left\{b'_{i,j}\,\left|\, j \in \mathbb{N}_0,  
+  \left\lfloor\frac{n}{2^j}\right\rfloor \bmod{2} = 1,i=\left\lfloor\frac{n}{2^j}\right\rfloor\cdot2^j \right.\right\} 
 \label{eq:pbst_roots}
 \end{equation}
-\textbf{ノードの接続}: ここで、$T_n$ に含まれる任意の非葉ノード $b_{i,j}, j > 0$ に対して、$\mathrm{left(i,j)}$ を左の子ノードの添字を得る関数、$\mathrm{right(i,j)}$ を右の子ノードの添字を得る関数とする。まず、$T_n$ に含まれる任意の非葉ノード $b_{i,j}$ に対して左の子ノードは式 (\ref{eq:child_left}) で求めることができる。
+$\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは $b_{n,\log_2 n}$ でなければならず、木構造全体が完全二分木 $T'_n$ であることを示している。そうでない場合、複数の層別木を結合する一過性ノードを生成する必要がある。二項演算子 $\otimes$ を左右のオペランドを子に持つ新しいノードを生成する演算としたとき、降順に並べた $\mathcal{B}'_n$ に対する右畳み込み操作 $\mathrm{reduce\_right}(\otimes, (\mathcal{B}'_n)_{\downarrow})$ は一過性ノードを生成しながら最終的に $T_n$ のルートノードを生成する。
+
+\begin{proposition}
+    \label{prop:bin} 木構造 $T_n$ に含まれる層別木は、$n$ の 2 進数表現における数値 1 に対応しており、その 1 が出現する位置を高さとする。 \label{prop:bit_psbt}
+\end{proposition}
+
+\begin{proposition}
+    \label{prop:e_refs} エントリ $e_n$ は、$n$ の 2 進数表現において最も右に位置する 1 に対応する層別木のルートノードを含んでおり、それより左に位置するすべての層別木のルートノードを参照している。
+\end{proposition}
+
+\textbf{ノードの接続}: ここで、$T_n$ に含まれる任意の非葉ノード $b_{i,j}, j > 0$ に対して、$\mathrm{left(i,j)}$ を左の子ノードの添字を得る関数、$\mathrm{right(i,j)}$ を右の子ノードの添字を得る関数とする。まず、$T_n$ に含まれる任意の非葉ノード $b_{i,j}$ に対して左の子ノードの添字は式 (\ref{eq:child_left}) で求めることができる。
 \begin{equation}
-    \mathrm{left}(i,j) = \left(\left\lfloor \frac{i-1}{2^{j-1}} \right\rfloor \cdot 2^{j-1},j - 1\right)
+    \mathrm{left}(i,j) = \left(\left\lfloor \frac{i-1}{2^{j-1}} \right\rfloor \cdot 2^{j-1},j - 1\right) = (i - 2^{j-1}, j-1)
     \label{eq:child_left}
 \end{equation}
-右のノードは $b_{i,j}$ が永続性ノードか一過性ノードかで求め方が異なる。一過性ノードの場合、接続の変則性から直下の $\mathcal{J}(i)$ または $\mathcal{J}'(i)$ の頂点と接続する。
+一過性ノードの場合、接続の変則性から $j$ にギャップが発生するため、右ノードの求め方が異なる。
 \begin{equation}
     \textrm{right}(i,j) = \begin{cases}
         (i, j-1) & \text{if $b_{i,j}$ is persistent} \\
-        \left(i,
-        \begin{cases}
-            \mathrm{ctz}(i) & \text{if $j = \min \mathcal{J}(i)$} \\
-            \max\{k \in \mathcal{J}(i) \mid k < j\} & \text{otherwise}
-        \end{cases}
-        \right) & \text{otherwise, it is ephemeral}
+        (i,  \mathrm{ctz}(i)) & \text{else if $j = \min \mathcal{J}(i)$} \\
+        (i,  \max\{k \in \mathcal{J}(i) \mid k < j\}) & \text{otherwise}
     \end{cases}
+    \label{eq:child_right}
 \end{equation}
 任意の非葉ノード $b_{i,j}$ とその右の子ノードは同じエントリ $e_i$ に属することから、任意のノードの右の子ノードの $i$ 成分は常に $b_{i,j}$ と同じ値である。
 
-\textbf{例 1}: 図 \ref{fig:t22} の例は上記の説明を視覚的に表している。$T_{22}$ における $n=22$ の 2 進数表現 \texttt{10110} から、$T_{22}$ には $\mathcal{B}'_{22}=\{b'_{16,4},b'_{20,2},b'_{22,1}\}$ をルートとする 3 つの完全二分部分木が含まれており、それらを連結する一過性ノード $\{b_{22,5},b_{22,3}\}$ によって単一の木構造を成している。$T_{22}$ において $i=22$ を持つノードはエントリ $e_{22}$ を構成している。
 \begin{figure}[htbp]
   \centering
-  \includegraphics[scale=.6]{fig/t22-structure-sketch.pdf}
-  \caption{$T_{22}$ の木構造: 2進数表現と完全二分部分木の対応}
+  \includegraphics[scale=.6]{figures/t22-structure-sketch.pdf}
+  \caption{$T_{22}$ の木構造: 2 進数表現と層別木 (独立した完全二分部分木) の対応を視覚的に表している。$22$ の 2 進数表現 $\mathtt{10110_2}$ から、$T_{22}$ には $\mathcal{B}'_{22}=\{b'_{16,4},b'_{20,2},b'_{22,1}\}$ をルートとする 3 つの独立した層別木が含まれており、それらを連結する一過性ノード $\{b_{22,5},b_{22,3}\}$ によって単一の木構造を成している。$T_{22}$ のルートから $b_{22}$ に至る経路上のノードはエントリ $e_{22}$ を構成する。}
   \label{fig:t22}
 \end{figure}
-\textbf{直列化形式}: 木構造 $T_n$ の直列化形式はエントリの列 $S_n=(e_1,e_2,\ldots,e_n)$ として表される。
+
+\textbf{直列化形式}: エントリの時系列順の列 $S_n=(e_1,e_2,\ldots,e_n)$ は木構造 $T_n$ を直列化したログ構造である。
 図 \ref{fig:t6_to_t7} は $T_6$ から $T_7$ への木構造の遷移と、直列化形式の変化を示している。
 
-$T_n$ に含まれる完全二分部分木の集合を $\mathcal{T}'_n = \{T'_{i,j}\}$ 
+データ列と直列化された木構造の空間計算量は $O(n \log n)$ である。
+
+\textbf{例 2}: $T_n$ に含まれる完全二分部分木の集合を $\mathcal{T}'_n = \{T'_{i,j}\}$ 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[scale=.8]{fig/t6-to-t7.pdf}
-  \caption{$T_{6}$ から $T_7$ への遷移}
+  \includegraphics[scale=.8]{figures/t6-to-t7.pdf}
+  \caption{$T_{6}$ から $T_7$ への木構造の遷移と直列化形式。}
   \label{fig:t6_to_t7}
 \end{figure}
 
+\subsubsection{被覆範囲}
+
+任意の部分木 $T_{i,j} \subseteq T_n$ に含まれる最右葉ノードは $b_i$ である。最左葉ノード $b_{\mathrm{i\_min}(i,j)}$ のインデックスは式 (\ref{eq:i_min}) で求めることができる。
+\begin{equation}
+    \mathrm{i\_min}(i,j) = \left\lfloor \frac{i-1}{2^j} \right\rfloor \times 2^j + 1 = 1 - ((i - 1) \bmod 2^j)
+    \label{eq:i_min}
+\end{equation}
+したがって部分木 $T_{i,j}$ の被覆範囲は $[\mathrm{i\_min}(i,j), i]$ である。
+
 \subsection{Append Operation}
 
-\subsection{}
+追記 (append) は、既存の木構造 $T_{n-1}$ にデータ $d_n$ を追加して $T_n$ を生成する操作である。これは新しいエントリ $e_n$ を生成し、既存の直列化形式に連結する操作と等価である。このセクションでは、追記のための操作手順を示し、$e_n$ を構築するためには、直前のエントリ $e_{n-1}$ に含まれるノード、またはそのノードが参照しているノードで十分であることを示す。
 
-Slate は部分構造として含まれている一つ以上の PSBT を統合しながら成長する。木構造の大半が完全二分木であることから、完全二分木に近い性質を持つ。
+データ追加に伴って発生するノードは次のように構築する。
+\begin{enumerate}
+    \item $d_n$ に対応する葉ノード $b_n = \{h_0(d_n),d_n\}$ を生成し、$T_{n-1}$ に含まれる層別木の並びの右に配置する。例えば $n=7$ の場合、$T_6$ に含まれる層別木のルートノードの並びに $b_7$ を連結した $\Sigma_7=(b_{4,2},b_{6,1},b_7)$ を作成する。
+    \item  木の並び $\Sigma_n$ を右から 2 個のペアごとに中間ノードで接続するように畳み込む。左右のノードを連結する新しいノードを生成する演算子を $\otimes$ としたとき、$\mathrm{reduce\_right}(\otimes,\Sigma_n)$ を実行する。$b_{i_l,j_l} \oplus b_{i_r,j_r} = b_{i_r,j_l+1}=\{h_{j_l+1}(b_{i_l,j_l}.hash\,||\,b_{i_r,j_r}.hash)\}$
+\end{enumerate}
 
-- Stratified構造の定義
-  * レベル分けの論理（なぜstratifiedか）
-  * 各レベルの役割と特性
-- ツリー構造の詳細
-  * ノード構成
-  * ハッシュ計算方法
-\subsection{Basic Operations}
-- Append(element) → commitment
-  * アルゴリズム詳細（pseudocode）
-  * レベル間の遷移ロジック
-- Verify(element, proof) → boolean
-- GenerateProof(element) → proof
+前述の通り、$n$ の 2 進数符号は $T_n$ に含まれる層別木を表していることから、追記による木構造の成長は $n-1$ から $n$ への符号の変化で考えることができる。特に、木構造の成長により複数の層別木がマージされより大きな層別木となることを二進累積すると言う。
+
+\begin{proposition}
+    \label{prop:append} 任意の $n \ge 1$ について、エントリ $e_n$ は直前のエントリ $e_{n-1}$ によって保持される状態と新規データ $d_n$ のみから完全に計算可能である。
+\end{proposition}
+\begin{proof}
+$n=1$ の基底ケースでは $e_1=\{b_1\}$ となることから $d_1$ のみから $e_1$ を計算可能であることは明らかである。
+
+$n-1 \to n$ の帰納ステップについて考える。$n-1$ の 2 進数表現において、最下位ビットから連続する 1 の個数 (つまり最初に 0 が現われる位置) を $\mathrm{cto}(n-1)$ とする。追記操作では、最下位ビットから連続する各 1 に対応する層別木が新しい葉 $b_n$ とマージされ、高さ $\mathrm{cto}(n-1)$ の新しい層別木が形成される (二進累積)。命題 \ref{prop:e_refs} より、マージされる各層別木のルートノードは $e_{n-1}$ に含まれるノードのいずれかと直接接続していることから、この新しい層別木を構築するために必要なノードは $e_{n-1}$ から知ることができる。
+
+次に、$\mathrm{cto}(n-1)$ より大きい桁ではインクリメントの影響を受けず、$n-1$ と $n$ とで同一の値であることから、$e_n$ は $e_{n-1}$ が参照している層別木のルートノードをそのまま引き継ぐことができる。したがって、$e_n$ を構築するためには $e_{n-1}$ と $d_n$ があれば十分である。
+\end{proof}
+
+命題 \ref{prop:append} は、Slate で効率的な追記を行うためには、高速なメモリ上に現在のエントリ $e_n$ のみを保持していれば十分であることを示している。以降、本論文では、特に指定しない限り、木構造 $T_n$ において最新のエントリ $e_n$ が高速なメモリ上に保持されていると想定する。
+
+\textbf{追記操作の複雑度}: 木構造 $T_{n-1}$ に新しいデータ $d_n$ を追記する操作では、エントリ $e_n$ を構築するのに要する時間複雑性は $O(\log n)$、エントリ $e_n$ 自身の空間複雑性は $O(\log n)$、エントリ $e_n$ を直列化形式に永続化する I/O 命令複雑性は $O(1)$ である。
+
+\subsection{Get Operation}
+
+本セクションでは Slate における参照操作を形式的に定義する。$\mathrm{get}$ 操作は、木構造 $T_n$ 中の任意のインデックス $i \in [1,n]$ に対応する葉 $b_i$ およびデータ要素 $d_i$ を参照し、また直列化形式の文脈ではその記録位置を特定する。
+\begin{equation}
+    \mathrm{get}(T_n,i) \to d_i
+\end{equation}
+
+\subsubsection{木構造における論理的経路}
+
+\begin{lemma}[層別木の被覆範囲]
+木構造 $T_n$ に含まれる任意の層別木 $T'_{i,j} \subseteq T_n$ の被覆範囲は式 (\ref{eq:coverage}) で表される。
+\begin{equation}
+    L(T'_{i,j}) = [i - 2^j + 1,i] =[ \left\lfloor \frac{i-1}{2^j} \right\rfloor\times 2^j + 1, i]
+    \label{eq:coverage}
+\end{equation} \label{prop:coverage}
+\end{lemma}
+\begin{proof}
+式 (\ref{eq:pbst_roots}) より、$T_n$ に高さ $j$ の層別木が存在するための必要条件は $\lfloor n/2^j\rfloor\bmod 2=1$ である。このとき、層別木のルートノード $b'_{i,j}$ は $i=\lfloor n/2^j\rfloor\times 2^j$ である。高さ $j$ の完全二分木は $2^j$ の葉ノードを含み、最右葉は $b_i$ であるため、最左葉は $b_{i-2^j+1}$ である。したがって被覆範囲は式 (\ref{eq:coverage}) となる。
+\end{proof}
+
+\begin{lemma}[XOR による層別木の特定]
+木構造 $T_n$ において、任意の葉ノード $b_i$ $(1 \le i \le n)$ を含む層別木の高さ $j$ は式 (\ref{eq:i_cover_pbst}) で表すことができる。
+\begin{equation}
+    j = \left\lfloor \log_2(n \oplus (i-1))\right\rfloor
+    \label{eq:i_cover_pbst}
+\end{equation}
+ここで $\oplus$ はビット単位の排他的論理和 (XOR) を表す。 \label{lemma:ident_pbst}
+\end{lemma}
+\begin{proof}
+式 (\ref{eq:n}) の通り、$n$ と $i-1$ の 2 進数表現をそれぞれ $n=\sum_{k\ge 0}\alpha_k 2^k$、$i-1=\sum_{k\ge 0}\beta_k 2^k$ 、$\alpha_k,\beta_k\in\{0,1\}$ とする。$0 \le i-1 < n$ より、$n$ と $i-1$ の 2 進数表現を上位桁から比較すると、ある位置 $k=p$ で初めて $\alpha_p=1$ かつ $\beta_p=0$ となる。この位置 $p$ より上位のすべての桁 $k \gt p$ では $\alpha_k = \beta_k$ が成り立つ。
+
+XOR 演算の定義より、$n \oplus (i-1)$ の桁 $k$ は $\alpha_k\ne \beta_k$ のとき 1、そうでないとき 0 となる。位置 $p$ は $\alpha_k\ne\beta_k$ を満たす最大の桁 $k$ であるため、$n \oplus (i-1)$ で最も上位の 1 は $p$ に位置する。したがって $p=\lfloor\log_2(n\oplus(i-1))\rfloor$ である。
+
+位置 $p$ において $\alpha_p=1$ であるため、命題 \ref{prop:bit_psbt} より、$T_n$ には高さ $p$ の層別木 $T'_{i^\dagger,p}$ が存在する。補題 \ref{prop:coverage} より、この層別木の被覆範囲は $[i^\dagger - 2^p + 1, i^\dagger]$ である。$k \gt p$ となる桁では $\alpha_k=\beta_k$ であるため
+\begin{equation*}
+    i - 1 = \sum_{k \ge 0} \beta_k 2^k < \sum_{k \gt p} \alpha_k 2^k + 2^p = i^\dagger
+\end{equation*}
+また、$\beta_p=0$ かつ $\beta_k \in \{0,1\}$ より
+\begin{equation*}
+    i-1 = \sum_{k< p} \beta_k 2^k + \sum_{k\gt p} \beta_k 2^k \ge \sum_{k\gt p} \alpha_k 2^k = i^\dagger - 2^p
+\end{equation*}
+したがって $i^\dagger-2^p \le i-1 < i^\dagger$ であり、$i^\dagger-2^p+1 \le i < i^\dagger$ となる。これは葉 $b_i$ が高さ $p$ の層別木の被覆範囲に含まれていることを示す。
+\end{proof}
+
+\begin{lemma}[層別木内のローカルインデックス]
+木構造 $T_n$ において、葉 $b_i$ を含む層別木 $T'_{i^\dagger,j}$ とする。層別木 $T'_{i^\dagger,j}$ 内での $b_i$ の 0-indexed なローカルインデックス $k$ は、式 (\ref{eq:i_local_index}) に示すように $i-1$ の下位 $j$ 桁で与えられる。
+\begin{equation}
+    k = (i-1) \land (2^j-1)
+    \label{eq:i_local_index}
+\end{equation}
+ここで $\land$ はビット単位の論理積を表す。 \label{lemma:i_local_index}
+\end{lemma}
+\begin{proof}
+層別木 $T'_{i^\dagger,j}$ の被覆範囲は $[i^\dagger-2^j+1,i^\dagger]$ であるため、葉 $b_i$ のローカルインデックスは:
+\begin{equation*}
+    k = i - (i^\dagger-2^j+1) = i-1-(i^\dagger-2^j)
+\end{equation*}
+補題 \ref{lemma:ident_pbst} の証明より、$n$ と $i-1$ は、2 進数表現において桁 $j$ より上位のすべての桁が一致する。ここで $T'_{i^\dagger,j}$ の左隣の層別木の最右葉 $b_{i^\dagger-2^j}$ の位置は: 
+\begin{equation*}
+i^\dagger-2^j = \sum_{m\gt j} \alpha_m 2^m = \sum_{m\gt j} \beta_m 2^m = (i-1) \land \lnot(2^{j+1}-1)
+\end{equation*}
+で表される。これは $i-1$ の 2 進数表現の下位 $j$ 桁を $0$ に設定した値と等しい。これより:
+\begin{equation*}
+    k = (i-1) - ((i-1) \land \lnot (2^{j+1}-1)) = (i-1) \land (2^j-1)
+\end{equation*}
+したがって $k$ は $i-1$ の下位 $j$ 桁と等しい。
+\end{proof}
+
+\begin{proposition}[完全二分木における経路決定]
+高さ $h$ の一般的な完全二分木 $T'$ において、葉ノードを左から順に $0,1,2,\ldots,2^h-1$ とインデックス付けする。ルートノードから葉 $k$ $(0 \le k < 2^h)$ への経路は、$k$ の $h$ 桁 2 進数表現:
+\begin{equation*}
+    k = \sum_{m=0}^{h-1} k_m 2^m, \quad k_m \in \{0,1\}
+\end{equation*}
+において、上位ビットから順に、ビット $k_m=0$ なら左枝子ノードへ、$k_m=1$ なら右枝子ノードへ移動することで到達できる。形式的には、高さ $h'$ $(0 < h' \le h)$ のノードから $h'-1$ のノードの遷移方向は:
+\begin{equation*}
+    \mathrm{direction}(k,h') = \begin{cases}
+        \text{left} & \text{if } k_{h'-1} = 0 \\
+        \text{right} & \text{if } k_{h'-1} = 1
+    \end{cases}
+\end{equation*}
+で決定する。\label{prop:pbst_dir}
+\end{proposition}
+\begin{proof}
+高さ $h$ に関する帰納法で証明する。
+
+基底ケース: $h=1$ の完全二分木は 2 つの葉を持ち、左の葉がインデックス $0$、右の葉がインデックス $1$ である。従って $k=0$ のとき左枝子ノード、$k=1$ のとき右枝子ノードを正しく選択する。
+
+帰納ステップ: 高さ $h-1$ 以下の完全二分木で命題が成立すると仮定し、高さ $h$ の場合を示す。高さ $h$ の完全二分木は、ルートの左枝と右枝にそれぞれ高さ $h-1$ の完全二分部分木を持つ。葉のインデックス付けに対し、左枝は $[0,2^{h-1}-1]$ を被覆し、右枝は $[2^{h-1},2^h-1]$ を被覆する。
+
+葉 $k$ について、$k < 2^{h-1}$ のとき、$k$ の $h-1$ 桁目は $0$ であり、葉 $k$ は左枝の部分木に含まれているため左枝に移動する。$k \ge 2^{h-1}$ のとき $k$ の $h-1$ 桁目は $1$ であり、葉 $k$ は右枝の部分木に含まれるため右枝に移動する。補題 \ref{lemma:i_local_index} に従い、どちらの部分木へ移動したとしても、$k$ の下位 $h-1$ 桁はその部分木のローカルインデックスを表しており、帰納法により葉 $k$ に到達する。したがって、$k$ の最上位の $h-1$ 桁目が最初の遷移方向を決定し、残りの桁が部分木内での経路を決定する。
+\end{proof}
+
+\begin{theorem}[2 進数表現による統一的経路決定]
+木構造 $T_n$ において、任意の葉 $b_i$ $(1 \le i \le n)$ への経路は $n$ と $i$ の 2 進数表現のみから以下の手順で決定できる。
+\begin{enumerate}
+    \item $j = \lfloor\log_2(n \oplus (i-1))\rfloor$ とする。 \label{theorem:path}
+    \item $T_n$ のルートから $\mathrm{popcount}(\lfloor n / 2^j \rfloor)$ 回、右枝子ノードに移動する。
+    \item $j \ne \mathrm{ctz}(n)$ であれば 1 回左枝子ノードに移動する。
+    \item $i-1$ の 2 進数表現の下位 $j$ 桁を上位から順に読み、$0$ なら左、$1$ なら右に移動する。
+\end{enumerate}
+\end{theorem}
+\begin{proof}
+補題 \ref{prop:bit_psbt} と \ref{lemma:ident_pbst} より、手順 1, 2, 3 は $n$ と $i-1$ の 2 進数表現から葉 $b_i$ を含む層別木を特定し、そのルートノードまで移動する。命題 \ref{prop:pbst_dir} より、手順 4 はその層別木のルートから葉 $b_i$ まで移動する。
+\end{proof}
+
+定理 \ref{theorem:path} より、$T_n$ のルートから葉 $b_i$ までの経路長 (ホップ数) は式 (\ref{eq:hops}) で表される。
+\begin{equation}
+    \mathrm{hops}(n,i) = \mathrm{popcount}(\lfloor n / 2^{j+1} \rfloor) + 1[j \ne \mathrm{ctz}(n)] + j
+    \label{eq:hops}
+\end{equation}
+ここで $j = \lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$1[\cdot]$ は指示関数とする。$\mathrm{popcount}$ と $j$ はそれぞれ $O(\log n)$ であることから、$T_n$ のルートから葉 $b_i$ まで到達する時間複雑性は $O(\log n)$ である。
+
+\textbf{例}: $T_{22}$ から葉 $b_{18}$ への経路について考える。
+\begin{eqnarray*}
+    n & = & 22 = 10110_2 \\
+    i & = & 18 = 10010_2 \\
+    n \oplus (i-1) & = & 00111_2 \\
+    j & = & \lfloor \log_2(n \oplus (i-1)) \rfloor = 2 \\
+    \lfloor n/2^{j+1} \rfloor & = & 22 \ \mathtt{>>} \ 3 = 00010_2 = 2 \\
+    \mathrm{popcount}(\lfloor n/2^{j+1} \rfloor) & = & \mathrm{popcount}(2) = 1 \quad \text{(move right branch once)}\\
+    \mathrm{ctz}(n) & = & \mathrm{ctz}(22) = 1 \ne j \quad \text{(move left branch)} \\
+    k & = & (i - 1) \land (2^j - 1) = 10001_2 \land 00011_2 = 01_2
+\end{eqnarray*}
+したがって経路は:
+\begin{equation*}
+    b_{22,5} \overset{\text{right}}{\longrightarrow}
+    b_{22,3} \overset{\text{left}}{\longrightarrow}
+    b'_{20,2} \overset{0:\text{left}}{\longrightarrow}
+    b'_{18,1} \overset{1:\text{right}}{\longrightarrow}
+    b_{18} 
+\end{equation*}
+であり、ホップ数は $\mathrm{hops}(22,18) = 4$ となる。
+
+\subsubsection{直列化形式における物理的 I/O コスト}
+
+Slate の直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ において、各エントリ $e_i$ を I/O (seek+read) の単位とする。ここで最新のエントリ $e_n$ はメモリ上に保持されていると仮定する。式 (\ref{eq:eij}) より、エントリ $e_i$ に含まれるノードは、木 $T_i$ から葉 $b_i$ への経路上のすべてのノードと一致する。この経路は、一過性ノードの連鎖と最右の層別木の右辺を経由し、常に右枝方向へ降下する。つまり右枝方向の移動は単一のエントリ内での移動に閉じており、I/O が発生することはない。
+
+木構造 $T_n$ のルートから葉 $b_i$ への経路において、エントリ $e_n$ がメモリ上に保持されているとき、I/O が発生するのは左枝子ノードへの移動時のみである。したがって I/O 回数は経路上の左枝移動回数に等しい。
+
+\begin{theorem}[I/O 回数]
+木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ $(1 \le i \le n)$ を参照するための I/O 回数 $\mathrm{IO}(n,i)$ は式 () で与えられる。
+\begin{equation}
+    \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}((i-1)\land(2^j-1))
+    \label{eq:io}
+\end{equation}
+ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ である。\label{theorem:io}
+\end{theorem}
+\begin{proof}
+定理 \ref{theorem:path} より、$T_n$ のルートから葉 $b_i$ への経路は、1) ルートから $\mathrm{popcount}(\lfloor n/2^{j+1}\rfloor)$ 回の右枝移動、2) $j\ne\mathrm{ctz}(n)$ であれば 1 回の左枝移動、3) 層別木内で $k=(i-1)\land(2^j-1)$ の 2 進数表現の各桁ごとの左右枝への移動、の 3 フェーズで構成される。フェーズ 1 はすべて右枝移動であるため I/O は発生しない。フェーズ 2 は 0 回か 1 回の左枝移動である。フェーズ 3 では、左枝移動の回数は $k$ の $j$ 桁 2 進数表現における $0$ (左枝移動) の個数と一致する。したがって $j-\mathrm{popcount}(k)=\mathrm{popcount}(\lnot k)$ 回の I/O が発生する。ここで $\lnot k$ は $k$ のビット単位の反転である。
+\end{proof}
+
+\begin{definition}[層別木内ハミング距離]
+高さ $j$ の層別木 $T'_{i^\dagger,j}$ において、葉 $b_i$ のローカルインデックス $k=(i-1)\land(2^j-1)$ に対し、層別木内ハミング距離を式 (\ref{eq:pbst_hamming}) のように定義する。
+\begin{equation}
+    d_H(j,k) = \mathrm{popcount}((2^j-1) \oplus k)
+    \label{eq:pbst_hamming}
+\end{equation}
+ここで $2^j-1$ は層別木 $T'_{i^\dagger,j}$ の最右葉のローカルインデックスである。
+\end{definition}
+
+\begin{lemma}[層別木内ハミング距離と左枝移動回数の等価性]
+高さ $j$ の完全二分において、ルートから葉 $k$ $(0 \le k < 2^j)$ への経路上の左枝移動回数は $d_H(j,k)$ に等しい。\label{lemma:pbst_hamming_eq_left}
+\begin{equation}
+    j - \mathrm{popcount}(k) = d_H(j,k)
+\end{equation}
+\end{lemma}
+\begin{proof}
+$2^j-1$ の 2 進数表現は $j$ 桁の $1$ の並びである。$k$ は $i-1$ の下位 $j$ 桁である。したがって $(2^j-1)\oplus k$ は $k$ を $j$ 桁 2 進数表現でビット反転させた値になる。したがって:
+\begin{equation*}
+    d_H(j,k) = \mathrm{popcount}((2^j-1)\oplus k) = \mathrm{popcount}(\lnot k) = j - \mathrm{popcount}(k)
+\end{equation*}
+命題 \ref{prop:pbst_dir} より、完全二分木のルートから葉 k への経路において、$k$ の各ビットが $0$ なら左枝移動、$1$ なら右枝移動である。したがって、左枝移動回数は $k$ の $j$ 桁 2 進数表現における $0$ の個数、すなわち $j-\mathrm{popcount}(k)$ である。
+\end{proof}
+
+\begin{theorem}[I/O 回数のハミング距離表現]
+木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数は式 (\ref{eq:io_hamming}) で与えられる。
+\begin{equation}
+    \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + d_H(j,k)
+    \label{eq:io_hamming}
+\end{equation}
+ここで:
+\begin{itemize}
+    \item $j=\lfloor\log_2(n\oplus(i-1)\rfloor$ (葉 $b_i$ を含む層別木の高さ)
+    \item $k = (i - 1) \land (2^j-1)$ (層別木内の 0-indexed なローカルインデックス)
+\end{itemize}
+\end{theorem}
+\begin{proof}
+定理 \ref{theorem:io} と補題 \ref{lemma:pbst_hamming_eq_left} より明らか。
+\end{proof}
+
+I/O 回数は以下の 2 つの成分の和として解釈できる。
+\begin{enumerate}
+    \item 層別木への到達コスト $1[j\ne \mathrm{ctz}(n)]$: 葉 $b$ を含む層別木が最右でなければ $1$、最右なら $0$。
+    \item 層別木内の距離コスト $d_H(j,k)$: 層別木の最右葉 $b_{i^\dagger}$ と目的の葉 $b_i$ のローカルインデックス間のハミング距離。
+\end{enumerate}
+
+層別木 $T'_{i^\dagger,j}$ の被覆範囲は $[i^\dagger-2^j+1,i^\dagger]$ である。葉 $b_i$ の 0-indexed なローカルインデックス $k$ は:
+\begin{equation*}
+    k = i - (i^\dagger - 2^j + 1) = i - i^\dagger + 2^j - 1
+\end{equation*}
+である。これを変形して:
+\begin{equation*}
+    2^j - 1 - k = 2^j - 1 ^ (i - i^\dagger + 2^j - 1) = i^\dagger - i
+\end{equation*}
+したがって、ハミング距離は層別木の最右葉との差 $i^\dagger-i$ に依存する。
+
+\begin{proposition}[I/O 回数とハミング距離の関係]
+木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数 $\mathrm{IO}(n,i)$ と相対ハミング距離 $d_H(n,i-1)$ の間には式 () に示す関係が成り立つ。
+\begin{equation}
+    \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + d_H(n,i-1) - 1 + \Delta(n,i)
+    \label{eq:io_rel_hamming}
+\end{equation}
+ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$Delta(n,i)$ は以下に定義する補正項である:
+\begin{equation}
+    \Delta(n,i) = \mathrm{popcount}(n \land (2^j-1)) - 2\times\mathrm{popcount}(n \land (i-1) \land (2^j-1))
+\end{equation}
+\end{proposition}
+
+\begin{theorem}[I/O 回数と相対ハミング距離の関係]
+$j=\lfloor\log_2(n\oplus(i-1))\rfloor$ としたとき、以下の性質を持つ:
+\begin{enumerate}
+    \item 上限: $\mathrm{IO}(n,i) \le j+1 = \lfloor\log_2(n \oplus (i-1))\rfloor + 1$
+    \item 下限: $\mathrm{IO}(n,i) \ge 1[j \ne \mathrm{ctz}(n)]$
+    \item 最近傍での効率: $\mathrm{IO}(n,n)=0$
+\end{enumerate}
+\end{theorem}
+
+\subsection{Truncate Operation}
+
+ある世代 $n$ から、それより小さな世代 $m < n$ に戻すには、直列化形式  $S_n=(e_1,e_2,\ldots,e_m,\ldots,e_n)$ を切り詰めて  $S_m=(e_1,e_2,\ldots,e_m)$ にすることができる。
+
+\subsection{Difference Detection Protocol}
+
+Merkle Tree における包含証明 (inclusion proof) \cite{merkle1989} (または所属証明、認証パス) とは、特定のデータ $d_i$ がツリーに含まれていることを、ツリー全体を開示することなく暗号論的に検証可能にする小さなデータ構造である。この包含証明はルートから葉までの経路上の兄弟ノード (sibling node) のハッシュ値の順序付き列である。Slate における差異検出でも包含証明と類似したハッシュ値の列を用いるが、その構造はやや異なっており、また目的も包含の証明ではない。本論文では、Slate の差異検出のために木を縦方向に割って断面の各ハッシュ値 (層) をサンプリングした列を\textbf{層サンプル} (stratum sample) を導入する。
+
+\subsubsection{Merkle Hash}
+
+一般的な Merkle Tree では、任意のノード $b_{i,j}$ が持つハッシュ値 $c_{i,j}$ は式 (\ref{eq:c}) を満たす。
+\begin{equation}
+    c_{i,j} = \begin{cases}
+        h_j( c_{i_l,j_l} \,||\, c_{i_r,j_r}) & \text{if } j > 0 \\
+        h_0(d_i) & \text{otherwise}
+    \end{cases}
+    \label{eq:c}
+\end{equation}
+ここで $c_{i_l,j_l}$ と $c_{i_r,j_r}$ はノード $b_{i,j}$ の左右の子ノードのハッシュ値を表している。Merkle Tree の性質より、ハッシュ値 $c_{i,j}$ は対応するノード $b_{i,j}$ をルートとする部分木に含まれるすべてのデータの暗号論的ダイジェストを意味する。したがって、2 つの木構造 $T^A_n$ と $T^B_n$ のルートハッシュ $c^A_n, c^B_n$ が異なる場合、暗号論的に $T^A_n$ と $T^B_n$ には異なるデータが少なくとも 1 つ含まれていることを意味している。
+
+\subsubsection{Stratum Sampling}
+
+Slate の木構造 $T_n$ に含まれる任意の部分木 $T_{i,j} \subseteq T_n$ のルートノード $b_{i,j}$ から、部分木の最右葉ノード $b_i$ への経路を式 (\ref{eq:path}) のように定義する。
+\begin{equation}
+    \mathcal{P}_{i,j} = \{ b_{i,k} \mid 0 \le k \le j \}
+    \label{eq:path}
+\end{equation}
+この経路は、高さ $j$ のルートノードから 0 の葉まで、常に右枝に向かって降下する。式 (\ref{eq:child_left}) より、$\mathcal{P}_{i,j}$ 上のノード $b_{i,k} (k > 0)$ の左子ノードを式 (\ref{eq:left_child}) のように定義する。
+\begin{equation}
+    \mathrm{leftchild}(b_{i,k}) = \begin{cases}
+        b_{i-2^{k-1},k-1} & \text{if } k > 0 \land i \ge 2^{k-1} \\
+        \bot & \text{otherwise}
+    \end{cases}
+    \label{eq:left_child}
+\end{equation}
+ここで $\bot$ は左子ノードが存在しないことを示す。
+
+\begin{definition}[層サンプル]
+木構造 $T_n$ に含まれる任意の部分木 $T_{i,j} \subseteq T_n$ において、$T_{i,j}$ のルートノード $b_{i,j}$ から部分木の最右葉ノード $b_i$ に至る経路 $\mathcal{P}_{i,j}$ 上の各ノードの左子ノードのハッシュ値と、最右葉 $b_i$ のハッシュ値の集合を\textbf{層サンプル} (stratum sample) と定義する。\label{def:stratum_sample}
+\begin{equation}
+    \mathcal{C}_{i,j} = \{ c_{i',j'} \mid b_{i',j'} = \mathrm{leftchild}(b_{i,k}), b_{i,k} \in \mathcal{P}_{i,j}, b_{i',j'} \ne \bot \} \cup \{ c_{i,0} \}
+    \label{eq:ss}
+\end{equation}
+\end{definition}
+
+層サンプルの各 $c_{i',j'}$ の添字は式 (\ref{eq:child_left}) と式 (\ref{eq:child_right}) で求めることができる。
+
+\begin{lemma}[層サンプルの高さ上限]
+$j>0$ である層サンプル $\mathcal{C}_{i,j}$ に含まれる任意のハッシュ値 $c_{i',j'}$ に対応するノード $b_{i',j'}$ の高さは、ルートノード $b_{i,j}$ より必ず小さい。
+\begin{equation}
+    \forall c_{i',j'} \in \mathcal{C}_{i,j}, j > 0: j' < j
+\end{equation} \label{lemma:c_height}
+\end{lemma}
+\begin{proof}
+定義 \ref{def:stratum_sample} より、層サンプル $\mathcal{C}_{i,j}$ のすべてのハッシュ値は以下のいずれかのノードに由来する:
+\begin{enumerate}
+    \item ルートノード $b_{i,j}$ から最右葉 $b_i$ への経路上の各ノードの左子ノード
+    \item 最右葉 $b_i$ 自身 (高さ $j=0$ のノード)
+\end{enumerate}
+$j > 0$ より 2. のケースは除外できる。ルートノード $b_{i,j}$ は $\mathcal{P}_{i,j}$ に含まれるノードのなかでもっとも大きい高さ $j$ を持つ。式 (\ref{eq:child_left}) より、$\mathcal{P}_{i,j}$ 上の各ノードの左子ノードの高さはその親ノードより厳密に 1 つ小さい。したがって、層サンプル $\mathcal{C}_{i,j}$ に含まれるすべてのハッシュ値 $c_{i',j'}$ に対して $j' < j$ が成立する。
+\end{proof}
+
+\begin{lemma}[層サンプルの完全被覆性]
+木構造 $T_n$ に含まれる任意の部分木 $T_{i,j} \subseteq T_n$ において、その層サンプル $\mathcal{C}_{i,j}$ の各ハッシュ値 $c_{i',j'}$ に対応するノード $b_{i',j'}$ を頂点とする各部分木は、部分木 $T_{i,j}$ の葉ノード全体をカバーする。
+    \begin{equation}
+        L(T_{i,j}) = \bigcup_{c_{i',j'} \in \mathcal{C}_{i,j}} L(T_{i',j'}) = [i-((i-1)\bmod{2^j}), i]
+    \end{equation}
+    ここで $L(T_{i,j})$ は部分木 $T_{i,j}$ の被覆範囲 (式 (\ref{eq:i_min}) も参照) を表す。 \label{lemma:cover} 
+\end{lemma}
+\begin{proof}
+$T_{i,j}$ のルート $b_{i,j}$ から葉 $b_i$ までの経路上のノード集合を $\mathcal{P}_{i,j}=(v_k,\ldots,v_0)$ とする。ここで $v_0$ は葉ノード、$v_k$ はルートノードである。各 $v_j$ に対してその兄弟ノードを $s_j$ とする。二分木構造より、各段階で:
+\begin{equation*}
+    L(v_{j+1}) = L(v_j) \cup L(s_j), \quad
+    L(v_j) \cap L(s_j) = \emptyset
+\end{equation*}
+が成り立つ。これを再帰的に適用すると:
+\begin{equation*}
+    L(v_k) = L(v_0) \cup \bigcup_{j=1}^{k} L(s_j)
+\end{equation*}
+を得る。$L(v_k)$ はルートノードの被覆範囲 $L(b_{i,j})$ である。また $L(v_0)=L(b_i)$ である。$ \bigcup_{j=1}^k L(s_j)$ は $\mathcal{P}_{i,j}$ の各左子ノードの被覆範囲を表している。この構造は定義 \ref{def:stratum_sample} の層サンプル $\mathcal{C}_{i,j}$ と同じであるため、層サンプル $\mathcal{C}_{i,j}$ は木 $T_{i,j}$ の葉を完全に被覆する。各 $s_j$ は異なる高さで $L(v_j)$ の補集合として現われるため、互いに独立している。
+
+部分木コミットメント列は包含証明に葉ノード $b_i$ のコミットメント (ハッシュ値) を含めた集合であるため、任意の $1 \le i \le n$ に対し、部分木コミットメント列 $C_{n,i}$ は $T_n$ に含まれるすべての葉ノードを被覆する。
+\end{proof}
+
+\begin{lemma}[層サンプルの暗号論的ダイジェスト性]
+層サンプル $\mathcal{C}_{i,j}$ は、木 $T_{i,j}$ のルートハッシュ $c_{i,j}$ と同様に、その木に含まれるすべての葉に含まれるデータの暗号論的ダイジェストを表す。 \label{lemma:sample_digest}
+\end{lemma}
+\begin{proof}
+補題 \ref{lemma:cover} とハッシュ関数 $h_j$ の衝突困難性より、層サンプルはその木のすべての葉ノードを被覆するため、各部分木のルートハッシュ値の集合は木全体のダイジェストと同等である。
+\end{proof}
+
+\begin{lemma}[層サンプルの等価性]
+2つの $n$-世代の木構造  $T^A_n$ と $T^B_n$ の部分木 $T^A_{i,j} \subseteq T^A_n$ と $T^B_{i,j} \subseteq T^B_n$ において、双方の層サンプルが等しい場合、暗号論的に $T^A_{i,j}$ と $T^B_{i,j}$ の被覆範囲に含まれる葉のデータはすべて等しい。 \label{lemma:c_identical}
+\begin{equation*}
+    \mathcal{C}^A_{i,j} = \mathcal{C}^B_{i,j} \quad\Longleftrightarrow \quad \forall k \in [\mathrm{i\_min}(i,j), i] : d^A_k = d^B_k
+\end{equation*}
+\end{lemma}
+\begin{proof}
+補題 \ref{lemma:sample_digest} とハッシュ関数 $h_j$ の衝突困難性より、葉のケースでは $\mathcal{C}^A_{i,0}=\mathcal{C}^B_{i,0}$ は $h_0(d^A_i)=h_0(d^B_i)$ を意味しているため $d^A_i=d^B_i$ は明らか。中間ノードのケースも同様に $c^A_{i,j}=c^B_{i,j}$ ならば双方の $T_{i,j}$ の被覆範囲の葉のデータは暗号論的に等しい。補題 \ref{lemma:cover} より、層サンプル $\mathcal{C}_{i,j}$ は $T_{i,j}$ のすべての葉のデータを被覆するため、双方の $T_{i,j}$ に含まれるデータはすべて等しいことが証明される。
+\end{proof}
+
+\subsubsection{Difference Detection using the Stratum Sample}
+
+差異位置の検出は 2 者間での層サンプルを 1 回以上交換することによって達成される。$A$ と $B$ の 2 者がそれぞれツリー $T_{n_a}$ と $T_{n_b}$ を保持していると想定する。ここで $A$ と $B$ は $n=\min(n_a,n_b)$ とする $n$-世代のツリー $T_n$ 上で動作することに合意しているものとする (世代が大きい方の木は $n$ 世代のスナップショットを使用する)。
+
+発起者である $A$ は、$B$ の持つデータ列との差異を検出するために、まず最初のラウンドで自身の木構造 $T^A_n$ 全体を対象とする層サンプル $\mathcal{C}^A_{n,\lceil\log_2 n\rceil}$ を作成して $B$ に送信する。$B$ はその各要素を自身の同じ部分木の層サンプル  $\mathcal{C}^B_{n,\lceil\log_2 n\rceil}$  と比較する。双方の層サンプルが同一であれば、補題 \ref{lemma:c_identical} より、$A$ と $B$ の $n$-世代までのデータ列に差異がないことが暗号論的に証明され、$B$ は $\bot$ で応答する。
+
+一方、層サンプルに含まれる 1 つ以上のハッシュ値が異なっていた場合、それらに対応する部分木の範囲に差異が存在することが明らかになる。ここで我々は、データ列の分岐を検出することを目的としているため、最初に出現する差異の位置を特定したいと考えている。したがって、差異のあるハッシュ値 $c^A_{i^*,j^*}\ne c^B_{i^*,j^*}$ の中で $i^*$ が最も小さい部分木に目的の差異が含まれていることになる。
+
+ここで $j^*=0$ であれば葉ノードの差異を意味しており、位置 $i^*$ のデータ $d^A_{i^*}$ と $d^B_{i^*}$ が異なることが明らかとなるため、$B$ は $\mathrm{OK}\{i^*\}$ で応答する。そうでない場合、$B$ は $b_{i^*,j^*}$ をルートとする部分木の層サンプル $\mathcal{C}^B_{i^*,j^*}$ を作成して $A$ に送信し、送信役/受信役を入れ替えて第二ラウンドを開始する。このインタラクションを繰り返すことにより、$A$ と $B$ のどちらかは最終的に目的の差異の位置 $i^*$ を発見する。
+
+差異検出を定式化した関数として表現すると式 (\ref{eq:finddiff}) のようになる。
+\begin{equation}
+    \mathrm{finddiff}(\mathcal{C}^\mathrm{sender}_{i,j},\mathcal{C}^\mathrm{receiver}_{i,j}) = \begin{cases}
+        \bot & \text{if } \mathcal{C}^\mathrm{sender}_{i,j} = \mathcal{C}^\mathrm{receiver}_{i,j} \\
+        \tilde{i} & \text{if } \delta_{i,j} = \{(\tilde{i},0)\}\\
+        \mathrm{finddiff}(\mathcal{C}^\mathrm{receiver}_{\tilde{i},\tilde{j}},\mathcal{C}^\mathrm{sender}_{\tilde{i},\tilde{j}}) & \text{otherwise}
+    \end{cases}
+    \label{eq:finddiff}
+\end{equation}
+ここで $\delta_{i,j}$ は $\mathcal{C}^A_{i,j}$ と $\mathcal{C}^B_{i,j}$ において $c^A_{i^*,j^*}\ne c^B_{i^*,j^*}$ であるような添字 $(i^*,j^*)$ の集合、$\tilde{i},\tilde{j}$ は $\delta_{i,j}$ の中で最も小さい $i^*$ を持つ添字ペアを表す。
+\begin{eqnarray*}
+    \delta_{i,j} & = & \{ (i^*,j^*) \mid c^A_{i^*,j^*} \in \mathcal{C}^A_{i,j}, c^B_{i^*,j^*} \in \mathcal{C}^B_{i,j}, c^A_{i^*,j^*} \ne c^B_{i^*,j^*} \} \\
+    \tilde{i} & = & \min\{ i^* \mid (i^*, j^*) \in \delta_{i,j} \} \\
+    \tilde{j} & = & j^*: (i^*,j^*) \in \delta_{i,j}, i^*=\tilde{i}
+\end{eqnarray*}
+初期実行は $\mathrm{finddiff}(\mathcal{C}^A_n,\mathcal{C}^B_n)$ で開始する。
+
+\begin{theorem}[差異検出の正当性]
+$T^A_n$ と $T^B_n$ を世代 $n$ のツリーとし、$D^A[1..n]$ と $D^B[1..n]$ をそれぞれのデータ列とする。ハッシュ関数 h が暗号論的に衝突困難であると仮定する。このとき、$\mathrm{finddiff}(\mathcal{C}^A_n,T^B_n)$ は以下を満たす:
+    \begin{enumerate}
+        \item $D^A[1..n] = D^B[1..n]$ ならば $\bot$ を返す。
+        \item そうでなければ $\tilde{i} = \min \{i \in [1,n] \mid D^A[i] \ne D^B[i]\}$ を返す。
+    \end{enumerate}
+\end{theorem}
+\begin{proof}
+補題 \ref{lemma:sample_digest} より、$\mathcal{C}_{n}$ に含まれるすべてのハッシュ値が等しい場合、$T^A_n$ と $T^B_n$ は同じデータ列を持っており、差異は存在しない ($\bot$ となる)。
+
+$\Delta$ を $D^A_n$ と $D^B_n$ の差異の位置の集合とする。つまり $\Delta=\{i\in[1,n]\mid D^A[i]\ne D^B[i]\}$ である。ある部分木 $T_{i,j} \subseteq T_n$ のカバーする範囲に差異が含まれている場合、$T_{i,j}$ のカバー範囲に $\Delta$ の少なくとも一つの要素が含まれている。
+\begin{equation*}
+    \Delta \cap L(T_{i,j}) \ne \emptyset
+\end{equation*}
+この場合、層サンプル $\mathcal{C}_{i,j}$ のうち、少なくとも 1 つのハッシュ値が異なっているはずである。補題 \ref{lemma:c_height} より、異なるハッシュ値 $c_{\tilde{i},\tilde{j}}$ に対応する部分木 $T_{\tilde{i},\tilde{j}}$ の高さは元の部分木 $T_{i,j}$ の高さより小さい。つまり、$\tilde{j} < j$ であり $T_{\tilde{i},\tilde{j}} \subset T_{i,j}$ である。
+
+したがって、どのハッシュ値に差異があっても、元の $T_{i,j}$ より小さな範囲をカバーする部分木を選択することになる。したがって、$\mathrm{finddiff}$ のラウンドが進むにつれ被覆範囲は必ず小さくなり、最終的に高さゼロの部分木、つまり差異を含む葉ノード $b_{\tilde{i}}$ を特定する。
+\end{proof}
+
+差異の特定は、データ列の中で最も古いもののみならず、すべての差異を特定できると予想される。ただし、そのような手法はデータ列の分岐点を検出することが目的の本論文の範囲外である。
+
+\begin{theorem}[差異検出の終了性]
+$\mathrm{finddiff}(\mathcal{C}^A_n,\mathcal{C}^B_n)$ は、$\tilde{i}=n$ のとき最良ケースで 1 回、$\tilde{i}=1$ のとき最悪ケースで $\lceil \log_2 n \rceil$ 回のラウンドで終了する。
+\end{theorem}
+\begin{proof}
+最初のラウンドで交換される層サンプル $\mathcal{C}_{n,\lfloor\log_2 n\rfloor}$ は葉ノード $b_n$ のハッシュ値 $c_{n,0}$ を含んでいるため、$\tilde{i}=n$ のとき 1 回目のラウンドで $\tilde{i}=n$ を特定する。一方、$\mathcal{C}_{n,\lfloor\log_2 n\rfloor}$ は $c_{n,0}$ 以外はすべて中間ノードのハッシュであるため、$c_{n,0}$ 以外で差異を検出した場合は $\tilde{i}$ の特定のために追加のラウンドが必要となる。したがって、最良ケースは $\tilde{i}=n$ のケースで 1 回のラウンドで終了する。
+
+最悪ケースはすべてのラウンドで層サンプル $\mathcal{C}_{i,j}$ の中から最も高い部分木 (最も左の部分木) を選択し続ける。1 回のラウンドで高さが 1 しか減少しないため、葉ノード ($j=0$) に到達するためには木 $T_n$ の高さである $\lceil\log_2 n\rceil$ 回のラウンドが必要である。この過程では左枝方向に降下して行くため、最終的に $\tilde{i}=1$ に到達する。したがって、最悪ケースは $\tilde{i}=1$ のケースで $\lceil\log_2 n\rceil$ 回のラウンドで終了する。
+\end{proof}
+
 \subsection{Complexity Analysis}
+
+本セクションでは、上に述べた Slate の主要な操作について計算量の理論値を分析する。分析にあたっては、ツリー内に $n$ 個のエントリが存在し、最新のエントリ 1 つをメモリ (一時記憶装置) 上に保持している状況を想定する。
+
+\subsubsection{Append Operation}
+
+Append 操作は新しいデータからエントリを生成し、直列化形式の末尾に追加する操作である。
+
 - Append: O(1) with cache, O(log n) worst case
 - Verify: O(log n)
 - Space: O(log n) for roots, O(n log n) for full tree
@@ -394,8 +836,8 @@ Slate の構造は二分木に基づいており、その数学的な表現に�
       \textbf{数式表記} & \textbf{ビット演算または CPU 命令} \\
       \hline
       $2^j$ & \texttt{1 << j} \\
-      $i \bmod 2^j$ & \texttt{i \& ((1 << j) - 1)}\\
-      $i - (i \bmod 2^j)$ & \texttt{i \& \^{}((1 << j) - 1) = (i >> j) << j} \\
+      $i \bmod 2^j$ & \texttt{i \& ((1 << j) - 1)} \\
+      $i - (i \bmod 2^j)$ & \texttt{i \& \^((1 << j) - 1) = (i >> j) << j} \\
       $\left\lfloor \frac{i}{2^j} \right\rfloor$ & \texttt{i >> j} \\
       $\left\lceil \frac{i}{2^j} \right\rceil$ & \texttt{(1 + (1 << j) - 1) >> j} \\
       $\lfloor \log_2 x \rfloor$ & \texttt{ilog2(x)}: $x$ の 2 進数表現で最も左にある 1 の位置。 \\
@@ -407,7 +849,7 @@ Slate の構造は二分木に基づいており、その数学的な表現に�
         n - 1 - \lfloor \log_2 x \rfloor & \text{if } x > 0 \\
         n & \text{if } x = 0
         \end{cases}$ & \texttt{clz(x)}: $x$ の最左ビットから連続する 0 の個数。count leading zeros.\\
-      $\mathrm{clo}(x)$ & \texttt{clz(^{}x)}: $x$ の最左ビットから連続する 1 の個数。count leading ones.\\
+      $\mathrm{clo}(x)$ & \texttt{clz(\^x)}: $x$ の最左ビットから連続する 1 の個数。count leading ones.\\
       \hline
   \end{tabular}
   \caption{数式表記からビット演算と CPU 命令への変換。}
