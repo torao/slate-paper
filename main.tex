@@ -514,7 +514,12 @@ I/O 回数は以下の 2 つの成分の和として解釈できる。
 ここで、式 (\ref{eq:io}) に関連する特性として、直列化形式における I/O 回数の上限と下限を導出する。まず $\mathrm{IO}(n,i)$ の離散分布における上限と下限を定義し、次に完全二分木での上限と下限を定義し、最後に一般的な木構造を分解して最終的な上限と下限を定義する。
 
 式 (\ref{eq:io}) における $\mathrm{IO}(n,i)$ の離散分布の境界をなぞる包絡線 (envelope, 凸包) の上側と下側をそれぞれ $\mathrm{IO}(n,i)$ の $i$ における上限 $c^+(n,i)$ および下限 $c^-(n,i)$ とする。これは図 \ref{fig:pbst_io11} における赤線と青線に相当する。
-
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{figures/t352-sketch.pdf}
+    \caption{Enter Caption}
+    \label{fig:placeholder}
+\end{figure}
 
 まず、完全二分木のケースについて考える。完全二分木 $T'_{n}$ ($n=2^j$) における $\mathrm{IO}(n,i)$ の上限と下限をそれぞれ $c'^+(n,i)$ と $c'^-(n,i)$ とすると、それぞれは式 (\ref{eq:pbst_io_cu})、式 (\ref{eq:pbst_io_cl}) の単調減少関数で表すことができる。
 \begin{eqnarray}
