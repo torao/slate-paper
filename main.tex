@@ -168,7 +168,7 @@ $T_n$ に含まれる任意のノード $b_{i,j}$ が永続性ノードかどう
 \end{equation}
 すべての葉ノード $b_{i,0}$ は $i \bmod{2^0} = 0$ であることから永続性ノードであることは明らかである。
 
-木構造 $T_n$ は、互いに独立した (部分構造の関係にない) 部分木の中で最大と見なされる完全二分木の集合で構成されている。本論文では、そのような完全二分部分木を\textbf{層別木} (stratum tree) と呼ぶ。
+木構造 $T_n$ は、互いに独立した (部分構造の関係にない) 部分木の中で最大と見なされる完全二分木の集合で構成されている。本論文では、そのような完全二分部分木を\textbf{層別木} (stratum tree) と呼び、左から $s \in [1,\mathrm{popcount}(n)]$ 番目に位置する層別木を $T'^{(s)}_{i_s,j_s}$ と表す。 
 
 \subsubsection{エントリ}
 木構造への追記操作 $T_{i-1} \overset{d_i}{\to} T_i$ の過程で新規に計算されるノードの集合を\textbf{エントリ} (entry) と定義し $e_i$ で表す。$e_i$ に含まれるすべてのノードの添字 $i$ (世代番号) はすべて同じであることに注意。ここで $e_i$ を構成するノードの添字 $j$ を求める。
@@ -421,17 +421,26 @@ Slate の直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ において、各エント�
 
 木構造 $T_n$ のルートから葉 $b_i$ への経路において、エントリ $e_n$ がメモリ上に保持されているとき、I/O が発生するのは左枝子ノードへの移動時のみである。したがって I/O 回数は経路上の左枝移動回数に等しい。
 
-\begin{theorem}[I/O 回数]
-木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ $(1 \le i \le n)$ を参照するための I/O 回数 $\mathrm{IO}(n,i)$ は式 () で与えられる。
+\begin{theorem}[I/O 回数]\label{theorem:io}
+木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ $(1 \le i \le n)$ を参照するための I/O 回数 $\mathrm{IO}(n,i)$ は式 (\ref{eq:io}) で与えられる。
 \begin{equation}
     \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}((i-1)\land(2^j-1))
     \label{eq:io}
 \end{equation}
-ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ である。\label{theorem:io}
+ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ である。
 \end{theorem}
 \begin{proof}
 定理 \ref{theorem:path} より、$T_n$ のルートから葉 $b_i$ への経路は、1) ルートから $\mathrm{popcount}(\lfloor n/2^{j+1}\rfloor)$ 回の右枝移動、2) $j\ne\mathrm{ctz}(n)$ であれば 1 回の左枝移動、3) 層別木内で $k=(i-1)\land(2^j-1)$ の 2 進数表現の各桁ごとの左右枝への移動、の 3 フェーズで構成される。フェーズ 1 はすべて右枝移動であるため I/O は発生しない。フェーズ 2 は 0 回か 1 回の左枝移動である。フェーズ 3 では、左枝移動の回数は $k$ の $j$ 桁 2 進数表現における $0$ (左枝移動) の個数と一致する。したがって $j-\mathrm{popcount}(k)=\mathrm{popcount}(\lnot k)$ 回の I/O が発生する。ここで $\lnot k$ は $k$ のビット単位の反転である。
 \end{proof}
+
+高さ $j$ の一般的な完全二分木において、最左葉のインデックスを 0、最右葉のインデックスを $2^j-1$ としたとき、任意のインデックス $i$ に対応する葉に到達するための右移動回数は $\mathrm{popcount}(i)$ であり、右移動回数は $\mathrm{popcount}(i \oplus (2^j-1))=j-\mathrm{popcount}(i)$ である。これらはそれぞれ $0$ と $2^j-1$ との\textbf{ハミング距離}の分布と同等となる。図 \ref{fig:pbst_io11} は完全二分木 $T'_{2^{11}}$ (つまり木全体が単一の層別木) における $\mathrm{IO}(2^{11},i)$ の離散分布を表している。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/hamming-distance-11.pdf}
+    \caption{変数 $x$ の $2^{11}-1$ に対するハミング距離の推移と、その振る舞いを拘束する階段状の境界線。上下の包絡線は、各区間における距離の理論的な最大値および最小値を規定している。}
+    \label{fig:pbst_io11}
+\end{figure}
+この特性により、層別木内はハミング距離で表すことができる。
 
 \begin{definition}[層別木内ハミング距離]
 高さ $j$ の層別木 $T'_{i^\dagger,j}$ において、葉 $b_i$ のローカルインデックス $k=(i-1)\land(2^j-1)$ に対し、層別木内ハミング距離を式 (\ref{eq:pbst_hamming}) のように定義する。
@@ -489,25 +498,101 @@ I/O 回数は以下の 2 つの成分の和として解釈できる。
 したがって、ハミング距離は層別木の最右葉との差 $i^\dagger-i$ に依存する。
 
 \begin{proposition}[I/O 回数とハミング距離の関係]
-木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数 $\mathrm{IO}(n,i)$ と相対ハミング距離 $d_H(n,i-1)$ の間には式 () に示す関係が成り立つ。
+木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数 $\mathrm{IO}(n,i)$ と相対ハミング距離 $d_H(n,i-1)$ の間には式 (\ref{eq:io_rel_hamming}) に示す関係が成り立つ。
 \begin{equation}
     \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + d_H(n,i-1) - 1 + \Delta(n,i)
     \label{eq:io_rel_hamming}
 \end{equation}
-ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$Delta(n,i)$ は以下に定義する補正項である:
+ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$\Delta(n,i)$ は以下に定義する補正項である:
 \begin{equation}
     \Delta(n,i) = \mathrm{popcount}(n \land (2^j-1)) - 2\times\mathrm{popcount}(n \land (i-1) \land (2^j-1))
 \end{equation}
 \end{proposition}
 
+\subsubsection{I/O コストの上限と下限}
+
+ここで、式 (\ref{eq:io}) に関連する特性として、直列化形式における I/O 回数の上限と下限を導出する。まず $\mathrm{IO}(n,i)$ の離散分布における上限と下限を定義し、次に完全二分木での上限と下限を定義し、最後に一般的な木構造を分解して最終的な上限と下限を定義する。
+
+式 (\ref{eq:io}) における $\mathrm{IO}(n,i)$ の離散分布の境界をなぞる包絡線 (envelope, 凸包) の上側と下側をそれぞれ $\mathrm{IO}(n,i)$ の $i$ における上限 $c^+(n,i)$ および下限 $c^-(n,i)$ とする。これは図 \ref{fig:pbst_io11} における赤線と青線に相当する。
+
+まず、完全二分木のケースについて考える。完全二分木 $T'_{n}$ ($n=2^j$) における $\mathrm{IO}(n,i)$ の上限と下限をそれぞれ $c'^+(n,i)$ と $c'^-(n,i)$ とすると、それぞれは式 (\ref{eq:pbst_io_cu})、式 (\ref{eq:pbst_io_cl}) の単調減少関数で表すことができる。
+\begin{eqnarray}
+c'^+(n,i) & = & \lfloor\log_2(n-i+1)\rfloor \label{eq:pbst_io_cu} \\
+c'^-(n,i) & = & \left\lceil\log_2 \frac{n}{i}\right\rceil = j - \lfloor\log_2 i\rfloor \label{eq:pbst_io_cl}
+\end{eqnarray}
+次に、一般的な木構造 $T_n$ について考える。$T_n$ には $t=\mathrm{popcount}(n)$ 個の層別木が含まれている。その $s \in [1,t]$ 番目の層別木 $T'^{(s)}_{i_s,j_s}$ は葉 $b_i$ を含んでいると想定する。もし $T'^{(s)}_{i_s,j_s}$ が最も右に位置する層別木、つまり $s=t$ であれば、到達コストの項 $1[s<t]$ は $0$ であり、その上限は $c^+=c'^+$ である。このとき、上限 $c^+$ は層別木 $T'^{(s)}$ 内での $i$ の上限 $1[s<t]+c'^+$ と、右の層別木 $T'^{(s+1)}$ の最大値 (つまり高さ) の大きい方である。
+\begin{equation}
+\begin{aligned}
+    c^+(n,i) & = \begin{cases}
+        \max\left( 1 + c'^+(2^{j_s},\ell), 1[s+1 < t] + j_{s+1} \right) & \text{if } s < t \\
+         c'^+(2^{j_s},\ell) & \text{if } s = t
+    \end{cases} \\
+    c^-(n,i) & = \begin{cases}
+        \min\left( 1[s < t] + c'^-(2^{j_s},\ell), 1\right) & \text{if } s > 1 \\
+        1[s < t] + c'^-(2^{j_s},\ell) & \text{if } s = 1
+    \end{cases}
+\end{aligned}
+\label{eq:io_bounds}
+\end{equation}
+ここで $\ell$ を層別木 $T'^{(s)}_{i_s,j_s}$ 内での $i$ のローカルインデックスとする。式 (\ref{eq:io_bounds}) の最大値と最小値はぞれぞれ式 (\ref{eq:pbst_io_bounds_minmax}) である。
+\begin{equation}
+\begin{aligned}
+    c^+(n,1) & = c^-(n,1) = \lceil\log_2 n\rceil \\
+    c^+(n,n) & = c^-(n,n) = 0
+\end{aligned}
+\label{eq:pbst_io_bounds_minmax}
+\end{equation}
+
+\begin{definition}[完全二分木の包絡線]
+高さ $h$ の完全二分木 $T'_{2^h}$ において、
+\end{definition}
+\begin{definition}[I/O 回数の包絡線]
+木構造 $T_n$ において、I/O 回数 $\mathrm{IO}(n,i)$ の離散分布に対し、その包絡線と構成する以下の関数を定義する:
+\begin{eqnarray*}
+c^+(n,i) & = \max_{i \le k \le n} \mathrm{IO}(n,k) \\
+c^-(n,i) & = \min_{1 \le k \le i} \mathrm{IO}(n,k) \\
+\end{eqnarray*}
+\end{definition}
+両包絡線は散布点の「外郭」を形成し、任意の位置 $i$ における I/O 回数は両包絡線に挟まれる。
+\begin{equation}
+c^-(n,i) \le \mathrm{IO}(n,i) \le c^+(n,i)
+\end{equation}
+$i$ が増加したとき、$c^+(n,i)$ の範囲 $[i,n]$ は狭まり最大値は減少する。一方、$c^-(n,i)$ の範囲 $[1,i]$ は広まり最小値は減少する。したがって、両包絡線はともに $i$ について広義単調減少である。それらの境界値は式 (\ref{eq:c_min_max}) のように表される。
+\begin{equation}
+\begin{aligned}
+c^+(n,1) & = c^-(n,1) = \lceil\log_2 n\rceil \\
+c^+(n,n) & = c^-(n,n) = 0
+\end{aligned}
+\label{eq:c_min_max}
+\end{equation}
+
 \begin{theorem}[I/O 回数と相対ハミング距離の関係]
-$j=\lfloor\log_2(n\oplus(i-1))\rfloor$ としたとき、以下の性質を持つ:
+$j_i=\lfloor\log_2(n\oplus(i-1))\rfloor$ としたとき、以下の性質を持つ:
 \begin{enumerate}
-    \item 上限: $\mathrm{IO}(n,i) \le j+1 = \lfloor\log_2(n \oplus (i-1))\rfloor + 1$
-    \item 下限: $\mathrm{IO}(n,i) \ge 1[j \ne \mathrm{ctz}(n)]$
+    \item 上限: $\mathrm{IO}(n,i) \le j_i+1 = \lfloor\log_2(n \oplus (i-1))\rfloor + 1$
+    \item 下限: $\mathrm{IO}(n,i) \ge 1[j_i \ne \mathrm{ctz}(n)]$
     \item 最近傍での効率: $\mathrm{IO}(n,n)=0$
 \end{enumerate}
 \end{theorem}
+\begin{proof}
+定理 \ref{theorem:io} より:
+\begin{equation*}
+\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}((i-1) \land (2^j - 1)]
+\end{equation*}
+$k=(i-1)\land(2^j-1)$ は $i-1$ の下位 $j$ ビットであるため $0 \le k < 2^j$ の範囲である。したがって $\mathrm{popcount}(k) \ge 0$ であり、上限:
+\begin{equation*}
+\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}(k) \le 1 + j
+\end{equation*}
+を導く。
+
+一方、$k$ は高々 $j$ ビット値であるため $\mathrm{popcount}(k) \le j$ である。したがって下限:
+\begin{equation*}
+\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}(k) \ge 1[j \ne \mathrm{ctz}(n)] + j - j = 1[j \ne \mathrm{ctz}(n)]
+\end{equation*}
+を導く。
+
+$i=n$ のとき、$n \oplus (n-1)$ となる。$\mathrm{ctz}(n)=m$ とすると、$n$ の 2 新数表現は位置 $m$ に最右となるビット $1$ を持ち、位置 $0$ から $m-1$ はすべて $0$ である。
+\end{proof}
 
 \subsection{Truncate Operation}
 
@@ -669,7 +754,7 @@ $\mathrm{finddiff}(\mathcal{C}^A_n,\mathcal{C}^B_n)$ は、$\tilde{i}=n$ のと�
 
 \subsection{Complexity Analysis}
 
-本セクションでは、上に述べた Slate の主要な操作について計算量の理論値を分析する。分析にあたっては、ツリー内に $n$ 個のエントリが存在し、最新のエントリ 1 つをメモリ (一時記憶装置) 上に保持している状況を想定する。
+本セクションでは、先に述べた Slate の主要な操作について計算量の理論値を分析する。分析にあたっては、ツリー内に $n$ 個のエントリが存在し、最新のエントリ 1 つをメモリ (一時記憶装置) 上に保持している状況を想定する。
 
 \subsubsection{Append Operation}
 
