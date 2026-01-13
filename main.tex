@@ -11,6 +11,7 @@
 \usepackage{amssymb}
 \usepackage{amsfonts}
 \usepackage{amsthm}
+\usepackage{booktabs}
 \usepackage[dvipdfmx]{graphicx}
 % \usepackage{fontspec}
 % \setmainfont{Noto Serif CJK JP}
@@ -22,26 +23,26 @@
 \newtheorem{lemma}{補題}[section]
 % \newtheorem{proof}{Proof}[section]
 
-\title{Slate: 分散ログ同期のための追記最適化マークルツリー}
-% \title{Slate: An Append-Optimized Hash Tree for Distributed-Log Synchronization}
+\title{Slate: 分散ログの分岐検出のための追記最適化マークルツリー}
+% \title{Slate: An Append-Optimized Merkle Tree for Fork Detection in Distributed Logs }
 \author{鷹見 虎男}
 \date{\today}
 \hypersetup{
-  pdftitle    = {Slate: 分散ログ同期のための追記最適化マークルツリー},
+  pdftitle    = {Slate: 分散ログの分岐検出のための追記最適化マークルツリー},
   pdfauthor   = {鷹見 虎男},
-  pdfkeywords = {Stratified Hash Tree, Slate, 分散ログ, 追記最適化, 時間的局所性, 同期, 分岐検出, Merkle ツリー, ハッシュツリー}
+  pdfkeywords = {Slate, Stratified Hash Tree, Merkle Tree, Hash Tree, Distributed Log, Append-Optimized, Temporal Optimized, Synchronization, Fork Detection, Difference Detection}
 }
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-大規模分散システムにおいて、分散するレプリカ間でのトランザクションログの迅速な修復と同期は、可用性・整合性・障害回復の性能に大きく影響する。現実的な分散ログは追記偏重のアクセス特性を持ち、その同期性能は分岐 (フォーク) の検出と修復の効率に大きく依存する。一方で、従来の方法はそのようなログ上で末尾からの線形探索で分岐を検出するため大規模なデータセットに対して非効率であり、適用可能な局面は限定的である。本論文は、大きな履歴遡及が頻繁に発生する状況でも効率的に機能する、追記最適化と時間局所性に基づくをアクセス特性を持つ Merkle Tree である \emph{Slate}（Stratified Hash Tree）を提案する。本論文ではまた、Slate において最新エントリから任意の位置のデータに到達するまでの I/O 回数分布がハミング距離に従うことを示し、分布の傾向により I/O が最新近傍で優先的に削減されることを理論化する。これに基づき、I/O がコスト支配的な一般的な状況において、$O(\log n)$ I/O での分岐位置の同定と $O(n)$ I/O での同期転送を満たす、暗号論的に確立された安全性に基づく修復手順を与える。さらに、証明サイズと比較ラウンド数について上界を導き、追記偏重のワークロードでの現実的な期待コストが最新データからのハミング距離に支配される非対称な性能特性を示す。
+大規模分散システムにおいて、分散するレプリカ間でのトランザクションログの迅速な修復と同期は、可用性・整合性・障害回復の性能に大きく影響する。現実的な分散ログは追記偏重のアクセス特性を持ち、その同期性能は分岐 (フォーク) 位置の検出と修復の効率に大きく依存する。一方で、従来の方法はそのようなログ上で末尾からの線形探索で分岐を検出するため大規模なデータセットに対して非効率であり、適用可能な局面は限定的である。本論文は、大きな履歴遡及が頻繁に発生する状況でも効率的に機能する、追記最適化と時間局所性に基づくをアクセス特性を持つ Merkle Tree である \textbf{Slate}（Stratified Hash Tree）を提案する。本論文ではまた、Slate において最新エントリから任意の位置のデータに到達するまでの I/O 回数分布がハミング距離に従うことを示し、分布の傾向により I/O が最新データの近傍で削減されることを理論化する。これに基づき、I/O コストが性能に支配的な現実的な状況において、$O(\log n)$ 回の I/O での分岐位置の同定と $O(n)$ I/O での同期転送を満たす、暗号論的に確立された安全性に基づく修復手順を与える。さらに、証明サイズと比較ラウンド数について上界を導き、追記偏重のワークロードでの現実的な期待コストが最新データからのハミング距離に支配される非対称な性能特性を示す。
 
 Rust の実装を用いた評価では、従来の Merkle Tree 構造に比べ、最新付近に偏る差分同期で転送量・探索 I/O・キャッシュミスが一貫して低減することを確認した。Slate は分散トランザクションログ、非同期レプリケーションログ、ブロックチェーン、および Git に類するハッシュグラフの分岐検出と修復に適用可能であり、追記最適化・時間局所性・認証性を両立する実用的基盤を提供する。
 \end{abstract}
 
-\textbf{Keywords}: Stratified Hash Tree, Slate, 分散ログ, 追記最適化, 時間的局所性, 分岐検出, 部分転送, 認証付きデータ構造
+\textbf{Keywords}: Slate, Stratified Hash Tree, Merkle Tree, Hash Tree, Distributed Log, Append-Optimized, Temporal Optimized, Synchronization, Fork Detection, Difference Detection
 
 % \tableofcontents
 % \newpage
@@ -178,12 +179,15 @@ $i$ の 2 進数表現に対し、最右桁から連続する $0$ の個数を�
     \mathcal{J}'(i) & = & \{\mathrm{ctz}(i), \mathrm{ctz}(i)-1, \ldots, 0\} \label{eq:ejp} \\
     \mathcal{J}(i) & = & \left\{ p + 1 \,\left|\, p \in \mathbb{N}_0, \left\lfloor \frac{i}{2^p} \right\rfloor \bmod 2 = 1, p > \mathrm{ctz}(i) \right.\right\} \label{eq:eje}
 \end{eqnarray}
-$\mathcal{J}'$ と $\mathcal{J}$ はそれぞれ永続性ノードと一過性ノードを区別している。これより、エントリ $e_i$ は式 (\ref{eq:eij}) のように表すことができる。
-\begin{equation}
-    e_i = \{ b'_{i,j} \mid j \in \mathcal{J}'(i) \} \cup \{b_{i,j} \mid j \in \mathcal{J}(i)\}
-    \label{eq:eij}
-\end{equation}
+$\mathcal{J}'$ と $\mathcal{J}$ はそれぞれ永続性ノードと一過性ノードを区別している。これより、エントリ $e_i$ と $e_i$ が含むノード数 $|e_i|$ は式 (\ref{eq:eij}) と (\ref{eq:ei_size}) のように表すことができる。
+\begin{eqnarray}
+    e_i & = & \{ b'_{i,j} \mid j \in \mathcal{J}'(i) \} \cup \{b_{i,j} \mid j \in \mathcal{J}(i)\}
+    \label{eq:eij} \\
+    |e_i| & = & |\mathcal{J}'(i)| + |\mathcal{J}(i)| = \mathrm{ctz}(i) + \mathrm{popcount}(i)
+    \label{eq:ei_size}
+\end{eqnarray}
 $e_n$ の空間計算量および構築にかかる時間計算量は共に $O(\log_2 n)$ である。
+
 後述するように、エントリは直列化形式においての保存単位であり、時間的局所性を空間的局所性に変換する、本論文において重要なパーツである。
 
 \subsubsection{木構造の構築}
@@ -200,7 +204,7 @@ n = \sum_{j \ge 0} \alpha_j\,2^j \quad (\alpha_j \in \{0,1\})
   \left\lfloor\frac{n}{2^j}\right\rfloor \bmod{2} = 1,i=\left\lfloor\frac{n}{2^j}\right\rfloor\cdot2^j \right.\right\} 
 \label{eq:pbst_roots}
 \end{equation}
-$\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは $b_{n,\log_2 n}$ でなければならず、木構造全体が完全二分木 $T'_n$ であることを示している。そうでない場合、複数の層別木を結合する一過性ノードを生成する必要がある。二項演算子 $\otimes$ を左右のオペランドを子に持つ新しいノードを生成する演算としたとき、降順に並べた $\mathcal{B}'_n$ に対する右畳み込み操作 $\mathrm{reduce\_right}(\otimes, (\mathcal{B}'_n)_{\downarrow})$ は一過性ノードを生成しながら最終的に $T_n$ のルートノードを生成する。
+$\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは $b'_{n,\log_2 n}$ でなければならず、木構造全体が完全二分木 $T'_n$ であることを示している。そうでない場合、複数の層別木を結合する一過性ノードを生成する必要がある。二項演算子 $\otimes$ を左右のオペランドを子に持つ新しいノードを生成する演算としたとき、降順に並べた $\mathcal{B}'_n$ に対する右畳み込み操作 $\mathrm{reduce\_right}(\otimes, (\mathcal{B}'_n)_{\downarrow})$ は一過性ノードを生成しながら最終的に $T_n$ のルートノードを生成する。
 
 \begin{proposition}
     \label{prop:bin} 木構造 $T_n$ に含まれる層別木は、$n$ の 2 進数表現における数値 1 に対応しており、その 1 が出現する位置を高さとする。 \label{prop:bit_psbt}
@@ -210,19 +214,17 @@ $\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは
     \label{prop:e_refs} エントリ $e_n$ は、$n$ の 2 進数表現において最も右に位置する 1 に対応する層別木のルートノードを含んでおり、それより左に位置するすべての層別木のルートノードを参照している。
 \end{proposition}
 
-\textbf{ノードの接続}: ここで、$T_n$ に含まれる任意の非葉ノード $b_{i,j}, j > 0$ に対して、$\mathrm{left(i,j)}$ を左の子ノードの添字を得る関数、$\mathrm{right(i,j)}$ を右の子ノードの添字を得る関数とする。まず、$T_n$ に含まれる任意の非葉ノード $b_{i,j}$ に対して左の子ノードの添字は式 (\ref{eq:child_left}) で求めることができる。
+\textbf{ノードの接続}: ここで、$T_n$ に含まれる任意の非葉ノード $b_{i,j}, j > 0$ に対して、$i_\ell,j_\ell$ を左の子ノードの添字、$i_r,j_r$ を右の子ノードの添字とする。$T_n$ に含まれる任意の非葉ノード $b_{i,j}$ に対して左右の子ノードの添字は式 (\ref{eq:children}) で求めることができる。
 \begin{equation}
-    \mathrm{left}(i,j) = \left(\left\lfloor \frac{i-1}{2^{j-1}} \right\rfloor \cdot 2^{j-1},j - 1\right) = (i - 2^{j-1}, j-1)
-    \label{eq:child_left}
-\end{equation}
-一過性ノードの場合、接続の変則性から $j$ にギャップが発生するため、右ノードの求め方が異なる。
-\begin{equation}
-    \textrm{right}(i,j) = \begin{cases}
-        (i, j-1) & \text{if $b_{i,j}$ is persistent} \\
-        (i,  \mathrm{ctz}(i)) & \text{else if $j = \min \mathcal{J}(i)$} \\
-        (i,  \max\{k \in \mathcal{J}(i) \mid k < j\}) & \text{otherwise}
-    \end{cases}
-    \label{eq:child_right}
+  \left\{
+  \begin{aligned}
+  i_\ell & = \left\lfloor \frac{i-1}{2^j} \right\rfloor \cdot 2^j+2^{j-1} = (i-1)-((i-1)\bmod  2^j)+2^{j-1} \\
+  j_\ell & = j-1 \\
+  i_r & = i \\
+  j_r & = \lceil \log_2 (i-i_\ell)\rceil
+  \end{aligned}
+  \right.
+    \label{eq:children}
 \end{equation}
 任意の非葉ノード $b_{i,j}$ とその右の子ノードは同じエントリ $e_i$ に属することから、任意のノードの右の子ノードの $i$ 成分は常に $b_{i,j}$ と同じ値である。
 
@@ -248,12 +250,11 @@ $\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは
 
 \subsubsection{被覆範囲}
 
-任意の部分木 $T_{i,j} \subseteq T_n$ に含まれる最右葉ノードは $b_i$ である。最左葉ノード $b_{\mathrm{i\_min}(i,j)}$ のインデックスは式 (\ref{eq:i_min}) で求めることができる。
+任意の部分木 $T_{i,j} \subseteq T_n$ の被覆範囲について考える。Slate の木の構築方法からその最右葉ノードは $b_i$ である。高さ $j$ の部分木 $T_{i,j}$ の左には、同じ高さ $j$ を持つ別の完全二分部分木が $\lfloor\frac{i-1}{2^j}\rfloor$ 個存在する。高さ $j$ の完全二分木は $2^j$ 個の葉ノードを含んでいることから、最左葉ノードのインデックス $\mathrm{i\_min}(i,j)$ は、$T_{i,j}$ より左に存在する葉ノードの総数 $+1$ であり、したがって式 (\ref{eq:i_min}) となる。
 \begin{equation}
-    \mathrm{i\_min}(i,j) = \left\lfloor \frac{i-1}{2^j} \right\rfloor \times 2^j + 1 = 1 - ((i - 1) \bmod 2^j)
+    \mathrm{i\_min}(i,j) = \left\lfloor \frac{i-1}{2^j} \right\rfloor \times 2^j + 1 = i - ((i - 1) \bmod 2^j)
     \label{eq:i_min}
 \end{equation}
-したがって部分木 $T_{i,j}$ の被覆範囲は $[\mathrm{i\_min}(i,j), i]$ である。
 
 \subsection{Append Operation}
 
@@ -267,8 +268,8 @@ $\mathcal{B}'_n$ が 1 つのノードのみを含む場合、そのノードは
 
 前述の通り、$n$ の 2 進数符号は $T_n$ に含まれる層別木を表していることから、追記による木構造の成長は $n-1$ から $n$ への符号の変化で考えることができる。特に、木構造の成長により複数の層別木がマージされより大きな層別木となることを二進累積すると言う。
 
-\begin{proposition}
-    \label{prop:append} 任意の $n \ge 1$ について、エントリ $e_n$ は直前のエントリ $e_{n-1}$ によって保持される状態と新規データ $d_n$ のみから完全に計算可能である。
+\begin{proposition} \label{prop:append}
+任意の $n \ge 1$ について、エントリ $e_n$ は直前のエントリ $e_{n-1}$ によって保持される状態と新規データ $d_n$ のみから完全に計算可能である。
 \end{proposition}
 \begin{proof}
 $n=1$ の基底ケースでは $e_1=\{b_1\}$ となることから $d_1$ のみから $e_1$ を計算可能であることは明らかである。
@@ -291,12 +292,12 @@ $n-1 \to n$ の帰納ステップについて考える。$n-1$ の 2 進数表�
 
 \subsubsection{木構造における論理的経路}
 
-\begin{lemma}[層別木の被覆範囲]
+\begin{lemma}[層別木の被覆範囲]\label{prop:coverage}
 木構造 $T_n$ に含まれる任意の層別木 $T'_{i,j} \subseteq T_n$ の被覆範囲は式 (\ref{eq:coverage}) で表される。
 \begin{equation}
     L(T'_{i,j}) = [i - 2^j + 1,i] =[ \left\lfloor \frac{i-1}{2^j} \right\rfloor\times 2^j + 1, i]
     \label{eq:coverage}
-\end{equation} \label{prop:coverage}
+\end{equation} 
 \end{lemma}
 \begin{proof}
 式 (\ref{eq:pbst_roots}) より、$T_n$ に高さ $j$ の層別木が存在するための必要条件は $\lfloor n/2^j\rfloor\bmod 2=1$ である。このとき、層別木のルートノード $b'_{i,j}$ は $i=\lfloor n/2^j\rfloor\times 2^j$ である。高さ $j$ の完全二分木は $2^j$ の葉ノードを含み、最右葉は $b_i$ であるため、最左葉は $b_{i-2^j+1}$ である。したがって被覆範囲は式 (\ref{eq:coverage}) となる。
@@ -374,10 +375,10 @@ i^\dagger-2^j = \sum_{m\gt j} \alpha_m 2^m = \sum_{m\gt j} \beta_m 2^m = (i-1) \
 葉 $k$ について、$k < 2^{h-1}$ のとき、$k$ の $h-1$ 桁目は $0$ であり、葉 $k$ は左枝の部分木に含まれているため左枝に移動する。$k \ge 2^{h-1}$ のとき $k$ の $h-1$ 桁目は $1$ であり、葉 $k$ は右枝の部分木に含まれるため右枝に移動する。補題 \ref{lemma:i_local_index} に従い、どちらの部分木へ移動したとしても、$k$ の下位 $h-1$ 桁はその部分木のローカルインデックスを表しており、帰納法により葉 $k$ に到達する。したがって、$k$ の最上位の $h-1$ 桁目が最初の遷移方向を決定し、残りの桁が部分木内での経路を決定する。
 \end{proof}
 
-\begin{theorem}[2 進数表現による統一的経路決定]
+\begin{theorem}[2 進数表現による統一的経路決定]\label{theorem:path}
 木構造 $T_n$ において、任意の葉 $b_i$ $(1 \le i \le n)$ への経路は $n$ と $i$ の 2 進数表現のみから以下の手順で決定できる。
 \begin{enumerate}
-    \item $j = \lfloor\log_2(n \oplus (i-1))\rfloor$ とする。 \label{theorem:path}
+    \item $j = \lfloor\log_2(n \oplus (i-1))\rfloor$ とする。
     \item $T_n$ のルートから $\mathrm{popcount}(\lfloor n / 2^j \rfloor)$ 回、右枝子ノードに移動する。
     \item $j \ne \mathrm{ctz}(n)$ であれば 1 回左枝子ノードに移動する。
     \item $i-1$ の 2 進数表現の下位 $j$ 桁を上位から順に読み、$0$ なら左、$1$ なら右に移動する。
@@ -394,7 +395,7 @@ i^\dagger-2^j = \sum_{m\gt j} \alpha_m 2^m = \sum_{m\gt j} \beta_m 2^m = (i-1) \
 \end{equation}
 ここで $j = \lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$1[\cdot]$ は指示関数とする。$\mathrm{popcount}$ と $j$ はそれぞれ $O(\log n)$ であることから、$T_n$ のルートから葉 $b_i$ まで到達する時間複雑性は $O(\log n)$ である。
 
-\textbf{例}: $T_{22}$ から葉 $b_{18}$ への経路について考える。
+\textbf{例}: $T_{22}$ から葉 $b_{18}$ への経路について考える。定理 \ref{theorem:path} より:
 \begin{eqnarray*}
     n & = & 22 = 10110_2 \\
     i & = & 18 = 10010_2 \\
@@ -415,7 +416,8 @@ i^\dagger-2^j = \sum_{m\gt j} \alpha_m 2^m = \sum_{m\gt j} \beta_m 2^m = (i-1) \
 \end{equation*}
 であり、ホップ数は $\mathrm{hops}(22,18) = 4$ となる。
 
-\subsubsection{直列化形式における物理的 I/O コスト}
+\subsubsection{読み込みの I/O コスト}
+\label{sec:io_cost}
 
 Slate の直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ において、各エントリ $e_i$ を I/O (seek+read) の単位とする。ここで最新のエントリ $e_n$ はメモリ上に保持されていると仮定する。式 (\ref{eq:eij}) より、エントリ $e_i$ に含まれるノードは、木 $T_i$ から葉 $b_i$ への経路上のすべてのノードと一致する。この経路は、一過性ノードの連鎖と最右の層別木の右辺を経由し、常に右枝方向へ降下する。つまり右枝方向の移動は単一のエントリ内での移動に閉じており、I/O が発生することはない。
 
@@ -433,7 +435,23 @@ Slate の直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ において、各エント�
 定理 \ref{theorem:path} より、$T_n$ のルートから葉 $b_i$ への経路は、1) ルートから $\mathrm{popcount}(\lfloor n/2^{j+1}\rfloor)$ 回の右枝移動、2) $j\ne\mathrm{ctz}(n)$ であれば 1 回の左枝移動、3) 層別木内で $k=(i-1)\land(2^j-1)$ の 2 進数表現の各桁ごとの左右枝への移動、の 3 フェーズで構成される。フェーズ 1 はすべて右枝移動であるため I/O は発生しない。フェーズ 2 は 0 回か 1 回の左枝移動である。フェーズ 3 では、左枝移動の回数は $k$ の $j$ 桁 2 進数表現における $0$ (左枝移動) の個数と一致する。したがって $j-\mathrm{popcount}(k)=\mathrm{popcount}(\lnot k)$ 回の I/O が発生する。ここで $\lnot k$ は $k$ のビット単位の反転である。
 \end{proof}
 
-高さ $j$ の一般的な完全二分木において、最左葉のインデックスを 0、最右葉のインデックスを $2^j-1$ としたとき、任意のインデックス $i$ に対応する葉に到達するための右移動回数は $\mathrm{popcount}(i)$ であり、右移動回数は $\mathrm{popcount}(i \oplus (2^j-1))=j-\mathrm{popcount}(i)$ である。これらはそれぞれ $0$ と $2^j-1$ との\textbf{ハミング距離}の分布と同等となる。図 \ref{fig:pbst_io11} は完全二分木 $T'_{2^{11}}$ (つまり木全体が単一の層別木) における $\mathrm{IO}(2^{11},i)$ の離散分布を表している。
+式 (\ref{eq:io}) の第二項 $j−\mathrm{popcount}((i−1)∧(2^j−1))$ は、層別木内でのローカルインデックス $k$ と最右葉 $2^j-1$ との\textbf{ハミング距離} $d_H(k,2^j-1)$ に等しい。これは完全二分木においてルートから葉への経路上の左移動回数が $0$ ビットの個数に対応することによる。 
+
+図 \ref{fig:t352} は $T_{352}$ に対する式 (\ref{eq:io}) の $\mathrm{IO}(352,i)$ の離散分布である。図 \ref{fig:t352_sketch} に概説するように、この分布は $T_{352}$ を構成する 3 つの層別木のハミング距離の分布で構成されている。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\linewidth]{figures/io-cost-352.pdf}
+    \caption{$T_{352}$ における I/O 回数分布と包絡線。I/O 特性は $T'^{(1)}$, $T'^{(2)}$, $T'^{(3)}$ の 3 つの層別木に対応してセグメント化されており、上限 $c^+(n,i)$ と下限 $c^-(n,i)$ で囲まれた漏斗状の領域が $i=n$ に向かって収束し、Slate の時間局所性を示す。}
+    \label{fig:t352}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/t352-sketch.pdf}
+    \caption{$T_{352}$ の構造と対応するセグメント化された I/O 特性。左図: 木構造 $T_{352}$ は 2 進数表現 $352=2^8 + 2^6 + 2^5$ に対応する高さ $8$, $6$, $5$ の 3 つの層別木 $T'^{(1)}$, $T'^{(2)}$, $T'^{(3)}$ で構成される。一過性ノード (点線の円) が各層別木を接続し、辺のラベルは到達コスト (左枝 $+1$、右枝 $+0$)を示す。 右図: 各層別木における I/O 回数の包絡線。実線は上側包絡線 $c^+$ (紺) と下側包絡線 $c^-$ (緑) を表し、$+1$ の矢印は一過性ノードから層別木への到達時に加算される到達コストを表す。}
+    \label{fig:t352_sketch}
+\end{figure}
+
+高さ $j$ の一般的な完全二分木において、最左葉のインデックスを $0$、最右葉のインデックスを $2^j-1$ としたとき、任意のインデックス $i$ に対応する葉に到達するための右移動回数は $\mathrm{popcount}(i)$ であり、右移動回数は $\mathrm{popcount}(i \oplus (2^j-1))=j-\mathrm{popcount}(i)$ である。これらはそれぞれ $0$ と $2^j-1$ との\textbf{ハミング距離}の分布と同等となる。図 \ref{fig:pbst_io11} は完全二分木 $T'_{2^{11}}$ (つまり木全体が単一の層別木) における $\mathrm{IO}(2^{11},i)$ の離散分布を表している。
 \begin{figure}
     \centering
     \includegraphics[width=0.75\linewidth]{figures/hamming-distance-11.pdf}
@@ -442,79 +460,11 @@ Slate の直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ において、各エント�
 \end{figure}
 この特性により、層別木内はハミング距離で表すことができる。
 
-\begin{definition}[層別木内ハミング距離]
-高さ $j$ の層別木 $T'_{i^\dagger,j}$ において、葉 $b_i$ のローカルインデックス $k=(i-1)\land(2^j-1)$ に対し、層別木内ハミング距離を式 (\ref{eq:pbst_hamming}) のように定義する。
-\begin{equation}
-    d_H(j,k) = \mathrm{popcount}((2^j-1) \oplus k)
-    \label{eq:pbst_hamming}
-\end{equation}
-ここで $2^j-1$ は層別木 $T'_{i^\dagger,j}$ の最右葉のローカルインデックスである。
-\end{definition}
-
-\begin{lemma}[層別木内ハミング距離と左枝移動回数の等価性]
-高さ $j$ の完全二分において、ルートから葉 $k$ $(0 \le k < 2^j)$ への経路上の左枝移動回数は $d_H(j,k)$ に等しい。\label{lemma:pbst_hamming_eq_left}
-\begin{equation}
-    j - \mathrm{popcount}(k) = d_H(j,k)
-\end{equation}
-\end{lemma}
-\begin{proof}
-$2^j-1$ の 2 進数表現は $j$ 桁の $1$ の並びである。$k$ は $i-1$ の下位 $j$ 桁である。したがって $(2^j-1)\oplus k$ は $k$ を $j$ 桁 2 進数表現でビット反転させた値になる。したがって:
-\begin{equation*}
-    d_H(j,k) = \mathrm{popcount}((2^j-1)\oplus k) = \mathrm{popcount}(\lnot k) = j - \mathrm{popcount}(k)
-\end{equation*}
-命題 \ref{prop:pbst_dir} より、完全二分木のルートから葉 k への経路において、$k$ の各ビットが $0$ なら左枝移動、$1$ なら右枝移動である。したがって、左枝移動回数は $k$ の $j$ 桁 2 進数表現における $0$ の個数、すなわち $j-\mathrm{popcount}(k)$ である。
-\end{proof}
-
-\begin{theorem}[I/O 回数のハミング距離表現]
-木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数は式 (\ref{eq:io_hamming}) で与えられる。
-\begin{equation}
-    \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + d_H(j,k)
-    \label{eq:io_hamming}
-\end{equation}
-ここで:
-\begin{itemize}
-    \item $j=\lfloor\log_2(n\oplus(i-1)\rfloor$ (葉 $b_i$ を含む層別木の高さ)
-    \item $k = (i - 1) \land (2^j-1)$ (層別木内の 0-indexed なローカルインデックス)
-\end{itemize}
-\end{theorem}
-\begin{proof}
-定理 \ref{theorem:io} と補題 \ref{lemma:pbst_hamming_eq_left} より明らか。
-\end{proof}
-
-I/O 回数は以下の 2 つの成分の和として解釈できる。
-\begin{enumerate}
-    \item 層別木への到達コスト $1[j\ne \mathrm{ctz}(n)]$: 葉 $b$ を含む層別木が最右でなければ $1$、最右なら $0$。
-    \item 層別木内の距離コスト $d_H(j,k)$: 層別木の最右葉 $b_{i^\dagger}$ と目的の葉 $b_i$ のローカルインデックス間のハミング距離。
-\end{enumerate}
-
-層別木 $T'_{i^\dagger,j}$ の被覆範囲は $[i^\dagger-2^j+1,i^\dagger]$ である。葉 $b_i$ の 0-indexed なローカルインデックス $k$ は:
-\begin{equation*}
-    k = i - (i^\dagger - 2^j + 1) = i - i^\dagger + 2^j - 1
-\end{equation*}
-である。これを変形して:
-\begin{equation*}
-    2^j - 1 - k = 2^j - 1 ^ (i - i^\dagger + 2^j - 1) = i^\dagger - i
-\end{equation*}
-したがって、ハミング距離は層別木の最右葉との差 $i^\dagger-i$ に依存する。
-
-\begin{proposition}[I/O 回数とハミング距離の関係]
-木構造 $T_n$ において、エントリ $e_n$ から葉 $b_i$ への I/O 回数 $\mathrm{IO}(n,i)$ と相対ハミング距離 $d_H(n,i-1)$ の間には式 (\ref{eq:io_rel_hamming}) に示す関係が成り立つ。
-\begin{equation}
-    \mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + d_H(n,i-1) - 1 + \Delta(n,i)
-    \label{eq:io_rel_hamming}
-\end{equation}
-ここで $j=\lfloor\log_2(n\oplus(i-1))\rfloor$ であり、$\Delta(n,i)$ は以下に定義する補正項である:
-\begin{equation}
-    \Delta(n,i) = \mathrm{popcount}(n \land (2^j-1)) - 2\times\mathrm{popcount}(n \land (i-1) \land (2^j-1))
-\end{equation}
-\end{proposition}
-
 \subsubsection{I/O コストの上限と下限}
 
-ここで、式 (\ref{eq:io}) に関連する特性として、直列化形式における I/O 回数の上限と下限を導出する。まず $\mathrm{IO}(n,i)$ の離散分布における上限と下限を定義し、次に完全二分木での上限と下限を定義し、最後に一般的な木構造を分解して最終的な上限と下限を定義する。
+ここで、式 (\ref{eq:io}) に関連する特性として、直列化形式における I/O 回数の上限と下限を導出する。最初に $\mathrm{IO}(n,i)$ の離散分布における上限と下限を定義し、次に完全二分木での上限と下限を定義し、最後に一般的な木構造を分解して最終的な上限と下限を定義する。
 
-式 (\ref{eq:io}) における $\mathrm{IO}(n,i)$ の離散分布の境界をなぞる包絡線 (envelope, 凸包) の上側と下側をそれぞれ $\mathrm{IO}(n,i)$ の $i$ における上限 $c^+(n,i)$ および下限 $c^-(n,i)$ とする。これは図 \ref{fig:pbst_io11} における赤線と青線に相当する。
-
+式 (\ref{eq:io}) における $\mathrm{IO}(n,i)$ の離散分布の境界をなぞる包絡線 (envelope, 凸包) の上側と下側をそれぞれ $\mathrm{IO}(n,i)$ の $i$ における上限 $c^+(n,i)$ および下限 $c^-(n,i)$ とする。これは図 \ref{fig:pbst_io11} における紺線と緑線に相当する。
 
 まず、完全二分木のケースについて考える。完全二分木 $T'_{n}$ ($n=2^j$) における $\mathrm{IO}(n,i)$ の上限と下限をそれぞれ $c'^+(n,i)$ と $c'^-(n,i)$ とすると、それぞれは式 (\ref{eq:pbst_io_cu})、式 (\ref{eq:pbst_io_cl}) の単調減少関数で表すことができる。
 \begin{eqnarray}
@@ -535,7 +485,7 @@ c'^-(n,i) & = & \left\lceil\log_2 \frac{n}{i}\right\rceil = j - \lfloor\log_2 i\
 \end{aligned}
 \label{eq:io_bounds}
 \end{equation}
-ここで $\ell$ を層別木 $T'^{(s)}_{i_s,j_s}$ 内での $i$ のローカルインデックスとする。式 (\ref{eq:io_bounds}) の最大値と最小値はぞれぞれ式 (\ref{eq:pbst_io_bounds_minmax}) である。
+ここで $\ell$ を層別木 $T'^{(s)}_{i_s,j_s}$ 内での $i$ のローカルインデックスとする。式 (\ref{eq:io_bounds}) の最大値と最小値はぞれぞれ式 (\ref{eq:pbst_io_bounds_minmax}) となる。
 \begin{equation}
 \begin{aligned}
     c^+(n,1) & = c^-(n,1) = \lceil\log_2 n\rceil \\
@@ -544,62 +494,11 @@ c'^-(n,i) & = & \left\lceil\log_2 \frac{n}{i}\right\rceil = j - \lfloor\log_2 i\
 \label{eq:pbst_io_bounds_minmax}
 \end{equation}
 
-\begin{definition}[完全二分木の包絡線]
-高さ $h$ の完全二分木 $T'_{2^h}$ において、
-\end{definition}
-\begin{definition}[I/O 回数の包絡線]
-木構造 $T_n$ において、I/O 回数 $\mathrm{IO}(n,i)$ の離散分布に対し、その包絡線と構成する以下の関数を定義する:
-\begin{eqnarray*}
-c^+(n,i) & = \max_{i \le k \le n} \mathrm{IO}(n,k) \\
-c^-(n,i) & = \min_{1 \le k \le i} \mathrm{IO}(n,k) \\
-\end{eqnarray*}
-\end{definition}
-両包絡線は散布点の「外郭」を形成し、任意の位置 $i$ における I/O 回数は両包絡線に挟まれる。
-\begin{equation}
-c^-(n,i) \le \mathrm{IO}(n,i) \le c^+(n,i)
-\end{equation}
-$i$ が増加したとき、$c^+(n,i)$ の範囲 $[i,n]$ は狭まり最大値は減少する。一方、$c^-(n,i)$ の範囲 $[1,i]$ は広まり最小値は減少する。したがって、両包絡線はともに $i$ について広義単調減少である。それらの境界値は式 (\ref{eq:c_min_max}) のように表される。
-\begin{equation}
-\begin{aligned}
-c^+(n,1) & = c^-(n,1) = \lceil\log_2 n\rceil \\
-c^+(n,n) & = c^-(n,n) = 0
-\end{aligned}
-\label{eq:c_min_max}
-\end{equation}
-
-\begin{theorem}[I/O 回数と相対ハミング距離の関係]
-$j_i=\lfloor\log_2(n\oplus(i-1))\rfloor$ としたとき、以下の性質を持つ:
-\begin{enumerate}
-    \item 上限: $\mathrm{IO}(n,i) \le j_i+1 = \lfloor\log_2(n \oplus (i-1))\rfloor + 1$
-    \item 下限: $\mathrm{IO}(n,i) \ge 1[j_i \ne \mathrm{ctz}(n)]$
-    \item 最近傍での効率: $\mathrm{IO}(n,n)=0$
-\end{enumerate}
-\end{theorem}
-\begin{proof}
-定理 \ref{theorem:io} より:
-\begin{equation*}
-\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}((i-1) \land (2^j - 1)]
-\end{equation*}
-$k=(i-1)\land(2^j-1)$ は $i-1$ の下位 $j$ ビットであるため $0 \le k < 2^j$ の範囲である。したがって $\mathrm{popcount}(k) \ge 0$ であり、上限:
-\begin{equation*}
-\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}(k) \le 1 + j
-\end{equation*}
-を導く。
-
-一方、$k$ は高々 $j$ ビット値であるため $\mathrm{popcount}(k) \le j$ である。したがって下限:
-\begin{equation*}
-\mathrm{IO}(n,i) = 1[j \ne \mathrm{ctz}(n)] + j - \mathrm{popcount}(k) \ge 1[j \ne \mathrm{ctz}(n)] + j - j = 1[j \ne \mathrm{ctz}(n)]
-\end{equation*}
-を導く。
-
-$i=n$ のとき、$n \oplus (n-1)$ となる。$\mathrm{ctz}(n)=m$ とすると、$n$ の 2 新数表現は位置 $m$ に最右となるビット $1$ を持ち、位置 $0$ から $m-1$ はすべて $0$ である。
-\end{proof}
-
-\subsection{Truncate Operation}
+\subsection{Truncate Operation} \label{sec:truncate_operation}
 
 ある世代 $n$ から、それより小さな世代 $m < n$ に戻すには、直列化形式  $S_n=(e_1,e_2,\ldots,e_m,\ldots,e_n)$ を切り詰めて  $S_m=(e_1,e_2,\ldots,e_m)$ にすることができる。
 
-\subsection{Difference Detection Protocol}
+\subsection{Difference Detection Protocol} \label{sec:diff_detect_protocol}
 
 Merkle Tree における包含証明 (inclusion proof) \cite{merkle1989} (または所属証明、認証パス) とは、特定のデータ $d_i$ がツリーに含まれていることを、ツリー全体を開示することなく暗号論的に検証可能にする小さなデータ構造である。この包含証明はルートから葉までの経路上の兄弟ノード (sibling node) のハッシュ値の順序付き列である。Slate における差異検出でも包含証明と類似したハッシュ値の列を用いるが、その構造はやや異なっており、また目的も包含の証明ではない。本論文では、Slate の差異検出のために木を縦方向に割って断面の各ハッシュ値 (層) をサンプリングした列を\textbf{層サンプル} (stratum sample) を導入する。
 
@@ -622,7 +521,7 @@ Slate の木構造 $T_n$ に含まれる任意の部分木 $T_{i,j} \subseteq T_
     \mathcal{P}_{i,j} = \{ b_{i,k} \mid 0 \le k \le j \}
     \label{eq:path}
 \end{equation}
-この経路は、高さ $j$ のルートノードから 0 の葉まで、常に右枝に向かって降下する。式 (\ref{eq:child_left}) より、$\mathcal{P}_{i,j}$ 上のノード $b_{i,k} (k > 0)$ の左子ノードを式 (\ref{eq:left_child}) のように定義する。
+この経路は、高さ $j$ のルートノードから 0 の葉まで、常に右枝に向かって降下する。式 (\ref{eq:children}) より、$\mathcal{P}_{i,j}$ 上のノード $b_{i,k} (k > 0)$ の左子ノードを式 (\ref{eq:left_child}) のように定義する。
 \begin{equation}
     \mathrm{leftchild}(b_{i,k}) = \begin{cases}
         b_{i-2^{k-1},k-1} & \text{if } k > 0 \land i \ge 2^{k-1} \\
@@ -640,7 +539,7 @@ Slate の木構造 $T_n$ に含まれる任意の部分木 $T_{i,j} \subseteq T_
 \end{equation}
 \end{definition}
 
-層サンプルの各 $c_{i',j'}$ の添字は式 (\ref{eq:child_left}) と式 (\ref{eq:child_right}) で求めることができる。
+層サンプルの各 $c_{i',j'}$ の添字は式 (\ref{eq:children}) で求めることができる。
 
 \begin{lemma}[層サンプルの高さ上限]
 $j>0$ である層サンプル $\mathcal{C}_{i,j}$ に含まれる任意のハッシュ値 $c_{i',j'}$ に対応するノード $b_{i',j'}$ の高さは、ルートノード $b_{i,j}$ より必ず小さい。
@@ -654,7 +553,7 @@ $j>0$ である層サンプル $\mathcal{C}_{i,j}$ に含まれる任意のハ�
     \item ルートノード $b_{i,j}$ から最右葉 $b_i$ への経路上の各ノードの左子ノード
     \item 最右葉 $b_i$ 自身 (高さ $j=0$ のノード)
 \end{enumerate}
-$j > 0$ より 2. のケースは除外できる。ルートノード $b_{i,j}$ は $\mathcal{P}_{i,j}$ に含まれるノードのなかでもっとも大きい高さ $j$ を持つ。式 (\ref{eq:child_left}) より、$\mathcal{P}_{i,j}$ 上の各ノードの左子ノードの高さはその親ノードより厳密に 1 つ小さい。したがって、層サンプル $\mathcal{C}_{i,j}$ に含まれるすべてのハッシュ値 $c_{i',j'}$ に対して $j' < j$ が成立する。
+$j > 0$ より 2. のケースは除外できる。ルートノード $b_{i,j}$ は $\mathcal{P}_{i,j}$ に含まれるノードのなかでもっとも大きい高さ $j$ を持つ。式 (\ref{eq:children}) より、$\mathcal{P}_{i,j}$ 上の各ノードの左子ノードの高さはその親ノードより厳密に 1 つ小さい。したがって、層サンプル $\mathcal{C}_{i,j}$ に含まれるすべてのハッシュ値 $c_{i',j'}$ に対して $j' < j$ が成立する。
 \end{proof}
 
 \begin{lemma}[層サンプルの完全被覆性]
@@ -744,7 +643,7 @@ $\Delta$ を $D^A_n$ と $D^B_n$ の差異の位置の集合とする。つま�
 
 差異の特定は、データ列の中で最も古いもののみならず、すべての差異を特定できると予想される。ただし、そのような手法はデータ列の分岐点を検出することが目的の本論文の範囲外である。
 
-\begin{theorem}[差異検出の終了性]
+\begin{theorem}[差異検出の終了性] \label{theorem:diffdetect_finiteness}
 $\mathrm{finddiff}(\mathcal{C}^A_n,\mathcal{C}^B_n)$ は、$\tilde{i}=n$ のとき最良ケースで 1 回、$\tilde{i}=1$ のとき最悪ケースで $\lceil \log_2 n \rceil$ 回のラウンドで終了する。
 \end{theorem}
 \begin{proof}
@@ -753,156 +652,442 @@ $\mathrm{finddiff}(\mathcal{C}^A_n,\mathcal{C}^B_n)$ は、$\tilde{i}=n$ のと�
 最悪ケースはすべてのラウンドで層サンプル $\mathcal{C}_{i,j}$ の中から最も高い部分木 (最も左の部分木) を選択し続ける。1 回のラウンドで高さが 1 しか減少しないため、葉ノード ($j=0$) に到達するためには木 $T_n$ の高さである $\lceil\log_2 n\rceil$ 回のラウンドが必要である。この過程では左枝方向に降下して行くため、最終的に $\tilde{i}=1$ に到達する。したがって、最悪ケースは $\tilde{i}=1$ のケースで $\lceil\log_2 n\rceil$ 回のラウンドで終了する。
 \end{proof}
 
+さらなる改善として、目的とする差異が特定の葉 $b_i$ かその近傍に存在する可能性が高いことが事前に分かっていれば、最初の層サンプルを $\mathcal{C}_i$ から開始することで差異検出の効率を高められると考えられるが、その議論はこの論文では範囲外である。
+
 \subsection{Complexity Analysis}
 
-本セクションでは、先に述べた Slate の主要な操作について計算量の理論値を分析する。分析にあたっては、ツリー内に $n$ 個のエントリが存在し、最新のエントリ 1 つをメモリ (一時記憶装置) 上に保持している状況を想定する。
+本セクションでは、前節までに述べた Slate の主要な操作について時間複雑度 (計算複雑度)、空間複雑度、および I/O 複雑度を分析する。現実の大規模なデータ構造では、CPU 演算と比較して二次記憶装置へのアクセス遅延が数桁大きくなり、I/O 回数がシステム全体の性能を支配する要因となる。したがって Slate では従来の計算複雑度に加えて I/O 複雑度を明示的に評価し、Slate が I/O コストの観点からも効率的であることを示す。 
 
-\subsubsection{Append Operation}
+以下の分析では、木構造 $T_n$ に $n$ 個の葉ノードが含まれており、最新のエントリ $e_n$ を一時記憶装置 (メモリ) 上に保持している状況を想定する。
 
-Append 操作は新しいデータからエントリを生成し、直列化形式の末尾に追加する操作である。
+\textbf{Append 操作}. 木構造 $T_{n-1}$ に新しいデータ $d_n$ を追加してエントリ $e_n$ を作成し $T_n$ に移行する操作である。命題 \ref{prop:append} より、$e_n$ を構築するには $e_{n-1}$ と $d_n$ のみが必要である。$e_n$ に含まれるノード数は $|J'(n)| + |J(n)|$ であるため時間複雑度、空間複雑度は $O(\log n)$ であり、ハッシュ計算は各ノードあたり定数時間で完了する。直列化形式への永続化は $e_n$ を既存のロブ末尾に追記する単一の書き込み操作で完了する。
 
-- Append: O(1) with cache, O(log n) worst case
-- Verify: O(log n)
-- Space: O(log n) for roots, O(n log n) for full tree
-\subsection{Correctness}
-- Proposition 1: Append操作の正しさ
-- Proposition 2: 一貫性証明の健全性
-- 簡潔な証明スケッチ
-\subsection{構造的アルゴリズムの概念}
-\subsection{層化 (stratification) と追記の形式的定義}
-\subsection{ノード配置とハッシュ計算規則}
-\subsection{Slate の生成過程と更新手順}
-\subsection{計算量と記憶効率の理論的解析}
+\textbf{Get 操作}. インデックス $i$ に対応する葉ノード $b_i$ を参照する操作である。定理 \ref{theorem:path} より、$T_n$ のルートノードから $b_i$ への経路長は $O(\log n)$ である。定理 \ref{theorem:io} より、その経路で $b_i$ に到達するときの I/O 回数 $\mathrm{IO}(n,i)$ は経路上の左枝移動回数に等しく、式 (\ref{eq:io}) で与えられる。
 
+\textbf{Truncate 操作}. 世代 $n$ から $m < n$ への切り詰めは、直列化形式 $S_n$ の末尾 $n-m$ 個のエントリを理論的に無効化する操作である。ファイルシステムの truncate システムコールを使用する場合、その位置の特定に Get 操作と同じ複雑度を要し、物理的なデータ削除は定数時間で完了する。
 
+\textbf{Difference Detection 操作}. 2 つの木 $T^A_n$ と $T^B_n$ の分岐点 (または共通接頭辞) を特定する操作である。定理 \ref{theorem:path} より、必要なラウンド数は最良で 1 回、最悪で $\lceil\log_2 n\rceil$ で、それぞれのラウンドに $O(\log n)$ 回の読み込みと比較が行われる。各ラウンドで交換される層サンプルのサイズは $O(\log n)$ である。
 
-参考： Champine論文のAlgorithm 1, 2のような明確なpseudocodeを提供。Utreexo論文のような視覚的な図解も効果的です。
+表 \ref{table:complexities} に各操作の複雑度を要約する。
+\begin{table}[t]
+  \centering
+  \begin{tabular}{lllll}
+    操作 & 時間複雑度 & 空間複雑度 & I/O 複雑度 (Write) & I/O 複雑度 (Read)  \\
+    Append & $O(\log n)$ & $O(\log n)$ & $O(1)$ & $0$ \\
+    Get (最悪) & $O(\log n)$ & $O(1)$ & ─ & $O(\log n)$ \\
+    Get (最良) & $O(1)$ & $O(1)$ & ─ & $0$ \\
+    Get (期待) & $O(\log(n-i))$ & $O(1$) & ─ & $O(\log(n-i))$ \\
+    Truncate & $O(1)$ & $O(1)$ & $O(1)$ & ─ \\
+    Diff Detection (最悪) & $O(\log^2 n)$ & $O(\log n)$ & ─ & $O(\log^2 n)$ \\
+    Diff Detection (最良) & $O(\log n)$ & $O(\log n)$ & ─ & $O(\log n)$ \\
+   \end{tabular}
+\caption{各操作の複雑度}
+\label{table:complexities}
+\end{table}
 
-\subsection{Problem Statement}
-\subsection{Slate Structure}
-\subsection{Properties}
+\subsubsection{空間複雑度}
 
-\section{(Temporal Locality Optimization}
-\subsection{Hamming Distance-based Access Pattern}
-- 定義：ハミング距離とアクセス効率の関係
-- Proposition 3: I/Oアクセスパターンの幾何分布
-- 証明：数式とともに
-- 視覚化：アクセス頻度の分布図
-\subsection{Leveled Gradual Cache Strategy}
-- 各レベルのキャッシュポリシー
-- メモリとI/Oのトレードオフ分析
-- 最適なキャッシュサイズの決定
-\subsection{Snapshot Isolation}
-- 並行操作のサポートメカニズム
-- MVCC-like semantics
-- 一貫性保証の証明
+木構造 $T_n$ 全体の空間複雑度は、各エントリ $e_n$ に含まれるノード数が $O(\log n)$ であることから、直列化形式 $S_n=(e_1,e_2,\ldots,e_n)$ の総ノード数は式 (\ref{eq:s_complexity}) で与えられる。
+\begin{equation}
+\sum_{i=1}^n |e_i| = \sum_{i=1}^n O(\log i) = O(n \log n)
+\label{eq:s_complexity}
+\end{equation}
+一方、メモリ上に保持する必要があるのは最新エントリ $e_n$ のみであり、その空間複雑度は $O(\log n)$ である。
 
-参考： Utreexo論文のSection 5のように、最適化テクニックを実用的な観点から説明。ただし、理論的な裏付けも提供。
+\subsubsection{I/O 複雑度の期待値}
 
-\section{Experimental Results}
-\subsection{AWS Deployment}
-\subsection{Performance Evaluation}
+式 (\ref{eq:io}) の I/O 回数 $\mathrm{IO}(n,i)$ はアクセス対象のインデックス $i$ に依存する。時間局所性を持つワークロードでは、$i$ が $n$ に近い値に偏るため、I/O 回数の期待値は最悪ケースより大幅に小さくなる。
+
+アクセス確率が幾何分布 $\mathrm{Pr}[\text{access } i] \propto p^{n-i}(1-p)$ に従うと仮定した場合、I/O 回数の期待値 $\mathbb{E}[\mathrm{IO}(n,i)]$ は式 (\ref{eq:expected_io_on_geodist}) で近似できる。
+\begin{equation}
+\mathbb{E}[\mathrm{IO}(n,i)] \approx \sum_{k=0}^{\lfloor\log_2 n\rfloor} k \cdot \mathrm{Pr}[\mathrm{IO} = k]
+\label{eq:expected_io_on_geodist}
+\end{equation}
+式 (\ref{eq:pbst_io_cu}) および (\ref{eq:pbst_io_cl}) の包絡線により、I/O 回数 $k$ を達成する葉ノードの個数は、最新から距離 $2^{k-1}$ から $2^k-1$ の集中する。したがって、時間局所性が強いワークロード ($p$ が $1$ に近い) では、期待 I/O 回数は $O(1)$ に近づく。
+
+Slate は History Tree と同等の空間複雑度を持ちながら、追記の I/O を $O(1)$ に改善し、さらに最新データへのアクセスを $O(1)$ で実現する。この非対称な性能特性は、追記変調かつ時間局所性を持つワークロードにおいて顕著な優位性をもたらす。これらの正しさは、基盤となるハッシュ関数 $h$ の衝突困難性に帰着する。
+
+\subsection{並行アクセスモデル}
+
+このセクションでは Slate において Truncate 操作を想定しない、あるいは起きないことが保証されている状況での並行アクセスについて分析する。この場合、Slate は部分永続的データ構造の性質を持ち、追加の同期機構なしで安全な並行アクセスを可能にする。本セクションでは Slate が提供する並行性保証を形式化する。
+
+\subsubsection{Single-Write / Multi-Reader 実行モデル}
+
+Slate は Single-Writer/Multi-Reader (SWMR) 並行実行モデルと適合する。このモデルでは:
+\begin{itemize}
+    \item 単一の Writer が Append 操作を実行し、新しいエントリ $e_n$ を直列化形式に追記する。
+    \item 複数の Reader が同時に Get 操作を実行できる。
+\end{itemize}
+
+永続性ノード $b'_{i,j}$ は一度作成されると不変であるため、Reader が参照するノードは Writer によって変更されることはない。
+
+\subsubsection{スナップショット読み取り一貫性}
+
+Reader は木構造 $T_n$ のメモリ上に保持されている最新のエントリ $e_n$ を読み取るか、直列化形式から過去の $e_m$ ($m \le n$) を読み取ることで、読み取り時点で読み取り対象とする世代を特定する。この読み取りに並行して別の Writer が $e_{n+1}$ 以降を追加しても、$e_n$ または $e_m$ を起点とする Reader の参照経路からそれらが観測されることはない。したがって Slate の読み取りはスナップショットに基づく一貫した結果が保証される。
+
+\subsubsection{Trancate の考察}
+
+Truncate 操作は世代を減少させることから、並行読み取りと競合する可能性がある。実用的な実装で Truncate をサポートするためにはいくつかの選択肢がある。例えばコミット (確定) 済みの世代を保護領域として Truncate 操作が及ばないようにする、Copy-on-Write を実装する、MVCC のような世代の分岐をサポートする、といった方法が考えられる。
+
+\section{Experimental Evaluation}
+
+このセクションでは Rust 実装を用いた Slate の実験的評価を説明する。評価では、追記性能、参照性能、時間局所性を持つワークロードでの参照性能、および差異検出性能について、複数のデータ構造や組み込みデータベースと比較する。
+
 \subsection{Implementation}
+
+Slate の参照実装は Rust で記述されており、\href{https://github.com/torao/slate}{https://github.com/torao/slate} から参照可能である。実装は以下の設計方針に基づく:
+
+\begin{enumerate}
+    \item \textbf{直列化形式}: エントリ単位でのシーケンシャル追記を基本とし、各エントリは固定長ヘッダと可変長のノード列で構成される。なお直列化形式に必要なストレージは「次に書き込むべき位置」をサポートすれば良く、比較のために RocksDB 実装を追加している。
+    \item \textbf{ハッシュ関数}: BLAKE3 をノードの高さ $j$ ごとに $h_j(m) = H(j\,||\,m)$ とドメイン分離して計算する。
+    \item \textbf{キャッシュ}: 最新エントリ $e_n$ をメモリ上に保持し、オプションで複数エントリのキャッシュをサポートする。
+\end{enumerate}
+
 - 実装環境（AWS EC2, Ubuntu, etc.）
 - ベンチマーク設定
 - データセット（real-world workloads）
-\subsection{Performance Evaluation}
-- Append throughput
-  * キャッシュあり/なしの比較
-  * スループット vs メモリ使用量
-- Verification performance
-- Memory consumption
-\subsection{Comparative Analysis}
-- vs History Tree
-- vs Merkle Search Trees
-- vs Prolly Trees
-- 表形式での比較（Table: Comparative Performance）
-\subsection{workload-Specific Results}
-- WAL scenario
-- Blockchain scenario  
-- Version control scenario
 
-参考： Crosby論文のTable 2のような明確な性能比較表。Utreexo論文のFigure 4のようなグラフで視覚化。
+\subsection{Experimental Setup}
+
+本実験は Amazon Web Services (AWS) のクラウド環境上で実施した。実験には計算最適化インスタンス (c5.2xlarge) であり、詳細はナードウェアおよびソフトウェア構成は表 \ref{table:experimental_setup} の通りである。ベンチマークプログラム\footnote{ベンチマークプログラムは \href{https://github.com/torao/slate-benchmark}{https://github.com/torao/slate-benchmark} で利用可能。}は Rust (rustc 1.90) でコンパイルされ、\verb|--release| フラグを用いて最適化されている。 
+
+\begin{table}
+    \centering
+    \begin{tabular}{ll}
+        \hline
+         Component & Specification \\
+         \hline \hline
+         CPU & Intel(R) Xeon(R) Platinum 8124M @ 3.00GHz (4 Cores, 8 Threads)  \\ \hline
+         Memory & 15.1GB \\ \hline
+         Storage & NVMe SSD (AWS EBS), ext4 Filesystem  \\ \hline
+         Disk Performance & Seq. Write: 149.0 MB/s, Random IOPS: \~1,699  \\ \hline
+         OS & Ubuntu 24.04.3 LTS (Kernel 6.14.0-1012-aws)  \\ \hline
+         Cloud Provider & AWS (Region: us-east-1)  \\ \hline
+    \end{tabular}
+    \caption{実験環境のハードウェア・ソフトウェア構成}
+    \label{table:experimental_setup}
+\end{table}
+
+\subsubsection{Comparison Targets}
+
+\begin{table}
+    \centering
+    \begin{tabular}{lll}
+        \hline
+        Structure& Physical Storage & Description \\
+        \hline \hline
+         Slate (file) & sequential file  & 本論文で提案するデータ構造と追記ストレージ\\ \hline
+         Slate (rocksdb) & RocksDB & 同一構造で LSM-Tree 型の KVS として \\ \hline
+         Slate (memkvs) & memory & 同一構造で非永続な記憶装置 \\ \hline
+         Binary Merkle Tree & file & $2^h$ 個の葉を持つ標準的な二分木 \\ \hline
+         Unindexed Sequential File & sequential file &  インデックスを持たない単純な列データファイル\\ \hline
+         IAVL+ & LevelDB & Cosmos で使用されている平衡木\\ \hline
+         Prolly Tree & DoltDB & git に類似したデータ操作をサポートする DB\\ \hline
+    \end{tabular}
+    \caption{Caption}
+    \label{tab:placeholder}
+\end{table}
+
+\subsection{Storage Space Consumption} \label{sec:storage_space_consumption}
+
+Slate の直列化形式における空間消費量を評価する。式 (\ref{eq:s_complexity}) より、Slate の理論的空間計算量は $O(n \log n)$ である。本セクションでは、この理論値と実測値の整合性を確認すると共に、他のデータ構造との比較を行う。
+
+データ数 $n$ を変化させたときの各実装のストレージ占有サイズの計測値を図 \ref{fig:ex_storage_space} に示す。Slate (file) は $n=8\mathrm{Mi}$ において約 $5.4$ GB を消費している。参照実装の直列化形式では、各エントリ $e_i$ は 65 bytes の固定長部分 (インデックスや葉ノードなど) と、各 50 bytes の可変長部分 (中間ノード) で構成される。ここで、式 (\ref{eq:ei_size}) より、$n$ 個のエントリに含まれる中間ノードの総数は $M(n) = \sum_{i=1}^n(\mathrm{ctz}(i)+\mathrm{popcount}(i)-1)$ となる。したがって $n=8\mathrm{Mi}=2^{23}$ においては、直列化形式 $S_{8\mathrm{Mi}}$ は $M(2^{23})=23\times 2^{22}$ 個の中間ノードを含み、そのサイズの理論値は $|S_{8\mathrm{Mi}}|=65\times 8\mathrm{Mi}+50\times M(2^{23})=5\mathrm{GiB}$ となる。したがってこの計測値は理論値と整合している。
+
+Slate (rocksdb) は同一の理論構造ながら Slate (file) より大きいストレージを消費している。これは RocksDB の LSM-Tree 構造に伴うメタデータと、コンパクション処理前の冗長データに起因する。
+
+DoltDB と IAVL+ はデータ作成のための Append 操作に多くの時間を費やしたため、$n=1\mathrm{Mi}$ 程度で計測を打ち切った。DoltDB では特に急速なストレージ消費が観測されている。
+
+これらの結果は、汎用的なバージョン管理データ構造や平衡木ベースの認証付きデータ構造と比較して、Slate が効率的な空間消費を達成していることを示している。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/20250920202203-volume.pdf}
+    \caption{各実装におけるストレージ消費量の比較。$n$ 個のデータを保存した時点でストレージ上で占有しているデータ領域のサイズを示す。}
+    \label{fig:ex_storage_space}
+\end{figure}
+
+\subsection{Append Performance} \label{sec:append_performance}
+
+図 \ref{fig:append_performance} に $n$ 個のデータを順次追加するのに要した累積時間を示す。図 \ref{fig:append_performance}(a) は、任意の追加をサポートしない Binary Merkle Tree を除いた比較対象を含み、図 \ref{fig:append_performance}(b) は特性の違いを明確にするため IAVL+ と DoltDB を除外している。
+
+\textbf{全体的傾向}. 図 \ref{fig:append_performance}(a) では、IAVL+ (LevelDB) と DoltDB が他の実装と比べて著しく遅いことが観測される。$n=1,048,576$ の追加において IAVL+ は $318,188$ [msec] を要しており、これは Slate (file) の約 80 倍に相当する。これらのデータストアは汎用的な Key-Value ストアやバージョン管理データベースとして設計されており、追記専用ワークロードに最適化されていないことが主な要因と考えられる。特に IAVL+ は各追記操作で AVL 木の再平衡化と LevelDB への書き込みが発生し、DoltDB は Prolly Tree の確率的分割とインデックス更新のオーバーヘッドを伴う。
+
+\textbf{Slate の各実装の比較}. 図 \ref{fig:append_performance}(b) より、同一の Slate 構造であっても物理ストレージの選択が性能に大きく影響することが確認できる。$n=8\times 10^6$ において、Slate (rocksdb) は約 $1.5\times 10^5$ [msec] を要するのに対し、Slate (file) は約 $4.3\times 10^4$ [msec] で完了している。RocksDB の実装は LSM-Tree のコンパクションに起因するレイテンシによる変動が顕著であり、データ量の増加に伴い性能劣化が加速する傾向を示す。一方、Slate (file) はシーケンシャル追記のみで完結するため、$n$ に対してほぼ線形の増加を維持している。
+
+Unindexed Sequence File (ハッシュツリーを持たない単純な追記専用ログ) は最も高速であり、$n=8\times 10^6$ で約 $1.0 \times 10^4$ [msec] を達成している。Slate (file) はこのベースラインの約 4 倍の時間を要するが、これはエントリごとに $O(\log n)$ 個のノードのハッシュ計算と書き込みが発生することに起因する。この追加コストは、分岐検出や完全性検証と言った機能を提供するための合理的なトレードオフである。
+
+Slate (memkvs) は非永続的なインメモリ実装であり、I/O とノード直列化のオーバヘッドを排除した場合の性能上限を示す。図 \ref{fig:append_performance}(b) において Slate (file) と Slate (memkvs) の差は比較的小さく、Slate の追記操作がシーケンシャル I/O として効率的に実行されていることを示唆している。
+
+これらの結果は Slate の追記最適化設計が有効であることを実証している。特に、エントリ単位でのシーケンシャルファイル追記という直列化形式の選択により、汎用 Key-Value ストア (RocksDB) を使用する場合と比較して 3 倍以上の性能向上を達成した。また、IAVL+ や DoltDB のような既存の認証付きデータ構造と比較して 1-2 桁の性能差があることは、追記偏重ワークロードにおいて専用設計のデータ構造が重要であることを示している。
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=1\linewidth]{figures/20250920202203-append-whole.pdf}
+    \caption*{(a) 対象となる実装全体の比較}
+  \end{minipage}\hfill
+  \begin{minipage}{0.64\linewidth}
+    \centering
+     \includegraphics[width=1\linewidth]{figures/20250920202203-append.pdf}
+    \caption*{(b) Slate 実装に限定した比較}
+  \end{minipage}
+  \caption{Append 操作のパフォーマンス比較。}
+  \label{fig:append_performance}
+\end{figure}
+
+\subsection{Get Performance}
+
+\subsubsection{理論値との整合性}
+
+最初に、セクション \ref{sec:io_cost} で導出した I/O 回数の理論値 $\mathrm{IO}(n,i)$ が実測性能と整合することを確認する。図 \ref{fig:t352} に示す $T_{352}$ での理論的な I/O 回数分布に対し、図 \ref{fig:t352_exp} は $T_{352}$ での実測レイテンシである。理論分布では、最古のデータ ($i=0$) へのアクセスに最大 9 回の I/O 回数を要し、最新のデータ ($i=352$) へは $0$ 回 (メモリ上のエントリ $e_n$ のみ) でアクセス可能である。実測結果はこの理論分布との強い相関を示しており、$i=1$ で約 $0.015$ msec、$i=352$ で約 $0.003$ msec となっている。両分布に共通して観測される段階的な減少パターンと、各層別木の境界 ($i=256,320,352$) あるいはさらにその部分木の境界 ($i=64,128,192,\ldots$) での不連続な変化は、式 (\ref{eq:io}) で導出した I/O 回数と、式 (\ref{eq:io_bounds}) で定義した包絡線 $c^+(n,i)$ および $c^-(n,i)$ の構造を反映している。この結果は、Slate の Get 操作の性能がハミング距離に基づく I/O 回数によって支配されていることを実証している。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/20260109000114-io.pdf}
+    \caption{$T_{352}$ における各位置の Get レイテンシ分布。各点は位置 $i$ の葉ノードのデータへのアクセスに要した平均レイテンシを表す。$i=1$ (最古) から $i=352$ (最新) に向かう全体的な減少傾向と、層別木の境界における段階的変化は、図 \ref{fig:t352} に示した理論的 I/O 回数分布 $\mathrm{IO}(n,i)$ と対応している。}
+    \label{fig:t352_exp}
+\end{figure}
+
+\subsubsection{大規模データでの比較評価} \label{sec:get_8m_performance}
+
+図 \ref{fig:get_performance} に、$n=8\times 10^6$ のデータ構造に対して、最新データからの距離 $\delta=n-i+1$ を変化させたときの Get 操作のレイテンシを示す。横軸は対数スケールである。なお、各 Slate 実装の計測では各距離 $\delta$ において I/O 回数が上限 $c^+(n,i)$ に達する位置、すはわち最悪ケースとなるインデックスを意図的に選択している。したがって、実際のワークロードにおける平均レイテンシはここで報告する値より低くなる。
+
+\textbf{定数時間アクセスの実装}. DoltDB、IAVL+、Binary Merkle Tree はいずれも距離 $\delta$ によらずほぼ一定のレイテンシを示す。ただし DoltDB は約 $0.38$ msec と最も遅い。Binary Merkle Tree は約 0.045 msec、IAVL+ は約 0.007 msec で安定しており、どちらも平衡木構造によって距離 $\delta$ によらず均一なアクセス特性を反映している。IAVL+ のレイテンシは下層の LevelDB のキャッシュが機能している可能性がある。
+
+\textbf{Slate の非対称アクセス特性}. Slate (file) は最新データ近傍 ($\delta < 10$) で約 $0.003$ msec と最も高速であり、$\delta$ の増加に伴い対数的に増加して $\delta = 10^7$ で約 $0.08$ msec に到達する。この値は最悪ケースを計測しているため、同じ距離 $\delta$ における平均的なアクセスではより低いレイテンシを期待できる。この特性はセクション \ref{sec:io_cost} で導出した I/O 回数の理論値 $\mathrm{IO}(n,i)=O(\log(n-i+1))$ と整合する。曲線に観測される鋸歯状パターンは、ハミング距離に基づく I/O 回数の離散分布 (式 (\ref{eq:io})) を反映している。
+
+\textbf{交差点の分析}. Slate (file) は最悪ケースにおいても $\delta < 10^3$ で Binary Merkle Tree より高速であった。平均ケースではこの交差はさらに右 (より大きな $\delta$) に移動すると予想される。これは、アクセスの大部分が最新近傍に集中するような時間局所性を持つ現実的なワークロードにおいてより大きな優位性を持つ。
+
+\textbf{Slate (rocksdb) の得意な挙動}. Slate (rocksdb) の性能は $\delta < 10^5$ で Slate (file) より優位だが、それ以降で急激に悪化し、最古のデータで約 $0.33$ msec に達した。これは RocksDB の内部キャッシュが最新データに偏っており、古いデータへのアクセスで LSM-Tree の複数のレベルを走査する必要があるためと考えられる。
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/20250920202203-get.pdf}
+    \caption{Get 操作のパフォーマンス比較。}
+    \label{fig:get_performance}
+\end{figure}
+
+\subsubsection{時間局所性のあるワークロード}
+
+セクション \ref{sec:get_8m_performance} では位置ごとの Get レイテンシを評価したが、現実のワークロードでは最新データへのアクセスが偏る時間局所性を持つことが多い。本セクションでは Zipf 分布に従うアクセスパターンにおける Slate の性能特性を評価する。
+
+\textbf{実験設定}. $n=2\times 10^9$ のデータ構造 $T_{2\mathrm{Gi}}$ に対して、最新データからの距離 $\delta=n-i+1$ が Zipf 分布 $p(\delta)\propto 1/k^s$ に従うようにアクセス位置を生成した。 歪度パラメータ $s \in \{0.5,1.2,1.5,2.0\}$ の 4 条件で各 $500$ 回のアクセスを行い、Get 操作にかかったレイテンシ $t$ の分布を計測した。$s$ が大きいほど最新データへのアクセスが集中する。
+
+\textbf{結果}. 図 \ref{fig:get_zipf_distribution} に各条件での Get レイテンシ $t$ のヒストグラムを示す。歪度 $s$ の増加に伴い、レイテンシの分布は低レイテンシ側に集中する明確な傾向が観測された。
+
+$s=0.5$ (弱い時間局所性) では、平均レイテンシ $\mu=0.0545$ msec、標準偏差 $\sigma=0.0124$ msec であり、分布は $0.05-0.06$ msec 付近にピークを持つ。これはアクセスが広範囲に分散し、古いデータへのアクセスも頻繁に発生することを反映している。
+
+$s=1.5$ では $\mu=0.0113$ msec、$\sigma=0.0084$ msec となり、分布は $0.008$ msec 付近に集中する。$s=2.0$ (強い時間局所性) では $\mu=0.0086$ msec、$\sigma=0.0042$ msec と最も低く、アクセスの大部分が最新近傍で完結している。
+
+\textbf{考察}. $s=0.5$ から $s=2.0$ への歪度の増加により、平均レイテンシは約 6.3 倍改善した。これは Slate の非対称アクセス特性が時間局所性を持つワークロードで有効に機能することを実証している。Web リクエストやブロックチェーントランザクションなど、現実のワークロードでは $s \ge 1.0$ 程度の時間局所性が報告されており [?,?,?]、Slate はこのような環境で Binary Merkle Tree や IAVL+ と比較して優位性を持つ。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/20250918001917-biased-get-slate-file_y.pdf}
+    \caption{$T_{2\mathrm{Gi}}$ に対する Zipf 分布に従うアクセスパターンにおける Get レイテンシの分布。歪度パラメータ $s$ の増加に伴い、レイテンシ分布が低レイテンシ側に集中する。各条件で $500$ 回のアクセスを計測した。}
+    \label{fig:get_zipf_distribution}
+\end{figure}
+
+\subsection{Difference Detection Performance}
+
+セクション \ref{sec:diff_detect_protocol} で定義した差異検出プロトコルの実測性能を評価する。この実験では、2 つの Slate (file) 木構造 $T^A_n$ と $T^B_n$ ($n=8\times 10^6$) を構築し、$d^A_i\ne d^B_i$ となるように位置 $i$ の値のみを異なる値に設定した。その後、プロトコルを開始して層サンプルの交換により差異位置 $i$ を特定するまでの時間を計測した。Get 操作と同様に、各距離 $\delta=n-i+1$ において最悪ケースとなる位置 ($\mathrm{IO}(n,i)=c^+(n,i)$ となる $i$) を選択した。
+
+\textbf{結果}. 図 \ref{fig:diff_detect_performance} に差異検出時間と最新データからの距離 $\delta$ の関係を示す。検出時間は $\delta$ に対して対数的に増加しており、$\delta=1$ (最新の近傍) で約 $0.2$ msec、$\delta=10^7$ (最古の近傍) で約 $4.0\text{-}4.5$ msec を要した。
+
+\textbf{理論値との整合}. 定理 \ref{theorem:diffdetect_finiteness} より、差異検出に要するラウンド数は最良ケースで $1$ 回、最悪ケースで $\lceil\log_2 n\rfloor=23$ 回である。図 \ref{fig:diff_detect_performance} の対数的増加傾向はこの理論的予想と整合している。
+
+\textbf{従来手法との比較}. Raft のログ同期や Git の分岐点検出では、末尾からの線形探索により最悪ケースで $O(n)$ の比較が必要となる。$n=8\times 10^6$ では数秒から数十秒を要する可能性があるのに対し、Slate は最悪ケースでも約 $4.5$ msec で差異位置を特定できる。これは 3-4 桁の性能改善に相当する。
+
+\textbf{最新近傍での高速検出}. 現在の分散システムでは、レプリカ間の差異位置は最新近傍に集中することが多い。ネットワーク遅延や一時的な障害による分岐は、通常、直近の数エントリから数百エントリの範囲で発生する。$\delta<100$ の範囲では検出時間が $0.6$ msec 以下であり、このような典型的なケースでは極めて高速な分岐検出が可能である。
+
+\textbf{考察}. これらの結果は Slate の差異検出プロトコルが大規模ログに対して効率的に機能することを実証している。特に、追記偏重ワークロードにおいて分岐が最新近傍に集中する場合、Slate は従来手法と比較して大幅な性能向上を達成する。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/20250918001917-diffdetect.pdf}
+    \caption{$T_{8\mathrm{Mi}}$ の木構造において分岐位置の検出に要した時間。位置 $i$ の葉のみを異なる値にした 2 つの $T_{8\mathrm{Mi}}$ の木構造から、差異検出プロトコル (セクション \ref{sec:diff_detect_protocol}) を実行して分岐位置を特定するまでの平均時間を示す。横軸は最新データからの距離 $\delta=n-i+1$ を対数スケールで表示している。角距離において最悪ケースとなる位置を選択した。}
+    \label{fig:diff_detect_performance}
+\end{figure}
+
+\subsection{Cache Effectiveness} \label{sec:cache_effectiveness}
+
+セクション \ref{sec:io_cost} で示したように、Get 操作の I/O 回数 $\mathrm{IO}(n,i)$ は最新エントリ $e_n$ から目的の葉 $b_i$ への経路上の左枝移動回数に等しい。したがって、木構造の上位に位置するエントリを追加でメモリ上にキャッシュすることで I/O 回数を削減できる。
+
+本実装では、最新の $e_n$ から左枝方向に $k$ ホップ以内で到達可能なエントリの集合を\textbf{レベル $k$ キャッシュ}と定義する。レベル $0$ は本論文で提案するように最新エントリ $e_n$ のみを保持し、空間計算量 $O(\log n)$ ですべての操作で 1 回の I/O を削減する。レベルが 1 つ上がるごとに、すべての操作で 1 回の I/O が削減される。レベル $k$ キャッシュは最大 $2^k$ 個のエントリを保持して空間計算量 $O(2^k \log n)$ となり、Get 操作の I/O 回数を最大 $k$ 回削減する。ただし、Append 操作ごとにキャッシュの更新が必要となり、更新コストはレベルに応じて増加する。具体的には、新しいエントリの追加と、ホップ数が $k$ を超えたエントリの追い出しが必要となる。
+
+Slate の構造的効率性により、キャッシュによる追加の性能向上は限定的である可能性がある。例えば $n==2^{64}$ という極めて大規模データセットに対しても、最悪ケースは $\mathrm{IO}(2^{64},1)=64$ 回に過ぎない。さらに、時間的局所性の強いワークロードでは式 (\ref{eq:io}) より実際の I/O 回数は大幅に小さくなる。したがって、多くの用途ではレベル 0 キャッシュのみで十分な性能が得られるだろう。ただし、Get の頻度が著しく高いケースや、時間的局所性が低くアクセスが昨日名ケース、1 回の I/O コストが著しく高いワークロードにおいてはレベル 1 以上のキャッシュが有効となるケースもある。
+
+このセクションでは、キャッシュレベルを変化させたときの Get 性能への影響を評価する。
+
+\textbf{実験設定}. $T_{8\mathrm{Mi}}$ に対して、$\mathrm{IO}(n,i)=c^+(n,i)$ の最悪ケースとなる位置 $i$ を選択し、キャッシュレベル $L\in\{0,1,2,3\}$ の 4 条件で Get 性能を計測した。Level 0 は最新エントリ $e_n$ のみをメモリ上に保存する通常の構成であり、Level $k$ は $e_n$ から左枝方向に $k$ ホップ以内で到達可能なすべてのエントリをキャッシュする。キャッシュされるエントリ数は Level $k$ に対して最大 $2^k$ 個である。
+
+\textbf{結果}. 図 \ref{fig:cache_level_comparison} にキャッシュレベル別の Get レイテンシを示す。全条件で対数的増加傾向は維持され、I/O 回数に対応する段階的な曲線が見られるが、キャッシュレベルの増加に伴い曲線が下方にシフトしている。
+
+最新近傍での全条件は約 $0.0003$ msec である。これは、キャッシュ内のエントリのみでアクセスが完結し I/O 回数が $0$ で完結するためである。 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/20250918001917-cache.pdf}
+    \caption{$T_{8\mathrm{Mi}}$ におけるキャッシュレベルによる Get 性能。}
+    \label{fig:cache_level_comparison}
+\end{figure}
 
 \section{Discussion}
-展開の流れ：
-- 結果の解釈：なぜSlateが優れているか
-- 適用可能なユースケース：どんなシステムに向いているか
-- トレードオフ：
-   - メモリ vs I/O
-   - 追記性能 vs 検証性能
-- シンプルさ vs 最適性
-- 限界と制約：
-   - ランダムアクセスには不向き
-   - 削除操作の複雑さ（もし実装していないなら）
-- 実装の考慮事項：
-   - プロダクション環境での注意点
-   - チューニングパラメータ
 
-\subsection{Related Work}
-- Merkle Tree Variants
-- Binary Numeral Trees
-- Authenticated Data Structures
-- Log-Structured Storage
+本セクションでは、実験結果の解釈、他のデータ構造との比較分析、適用可能なユースケース、設計上のトレードオフ、および制限事項について議論する。
+
+\subsection{結果の解釈}
+
+実験結果は、Slate の背系原理が追記偏重ワークロードにおいて有効であることを実証している。
+
+\textbf{理論と実測の整合性}. セクション \ref{sec:io_cost} で導出した I/O 回数の理論値 $\mathrm{IO}(n,i)$ は、図 \ref{fig:t352_exp} に示す実測レイテンシと強い相関を示した。特に、層別木の境界における段階的な変化パターンは、式 (\ref{eq:io}) で定義したハミング距離に基づく I/O 回数分布を正確に反映している。ストレージ消費量についても、$n=8\mathrm{Mi}$ において理論値 $5.0\mathrm{GiB}$ に対して実測値約 $5.4\mathrm{GB}$ と整合している。
+
+\textbf{非対称アクセス特性の有効性}. 図 \ref{fig:get_zipf_distribution} に示す Zipf 分布に従うアクセスパターンの実験では、歪度パラメータ $s$ の増加に伴い平均レイテンシが約 $6.3$ 倍改善した。これは、Slate の非対称構造が時間局所性を持つ現実的なワークロードにおいて機能することを示している。Web リクエストやブロックチェーントランザクションでは $s \ge 1.0$ 程度の時間局所性が報告されており、Slate はこのような環境で顕著な優位性を持つ。
+
+\textbf{追記性能の優位性}. Slate (file) は IAVL+ と比較して約 56 倍、DoltDB と比較して約 66 倍の追記スループットを達成した。この性能差は、Slate の直列化形式が単一のシーケンシャルファイルの追記で完結する設計に起因する。IAVL+ では追記操作ごとに AVL 木の再平衡化と LevelDB への複数回の書き込みが発生し、DoltDB では Prolly Tree の確率的分割とインデックス更新のオーバーヘッドが加わる。一方、命題 \ref{prop:append} より、Slate では新しいエントリ $e_n$ の構築に必要な情報がすべて直前のエントリ $e_{n-1}$ に含まれているため、追加の読み込み I/O なしに追記を完了できる。
+
+\subsubsection{他のデータ構造との比較分析}
+
+\textbf{History Tree との関係}. Slate は History Tree を基盤としていくつかの重要な拡張を行っている。第一に、エントリ単位での直列化形式を定義し、追記性能が $O(1)$ の書き込み I/O で完結することを保証した。History Tree の論文では直列化形式 (保存形式) には議論されておらず、したがって I/O 効率についても議論されていない。第二に、セクション \ref{sec:diff_detect_protocol} 分岐検出プロトコルを設計し、複数のログ間の差異位置を $O(\log^2 n)$ の通信複雑度で特定する手法を確立した。第三に、式 (\ref{eq:io_bounds}) に示すように時間局所性に基づく I/O 回数の上限・下限を数学的に導出し、アクセスパターンと性能の関係を形式化した。
+
+\textbf{平衡木ベースの認証付きデータ構造との比較}. IAVL+ や従来の平衡 Merkle Tree は、任意のキーに対して均一な $O(\log n)$ アクセスを提供する。この特性は前提条件のない操作には適しているが、その平坦な設計は追記偏重かつ時間局所性を持つワークロードでは標準的なケースの効率を落としている。Slate は追記最適化という制約を受け入れることで、最新データへの $O(1)$ アクセスと、最悪ケースでも $O(\log n)$ を維持する非対称特性を実現している。図 \ref{fig:get_performance} に示す実験結果では、$\delta < 10^3$ の範囲で Slate の最悪ケースが Binary Merkle Tree より高速であり、時間局所性のあるワークロードではさらに有利な範囲が拡大することが予想される。
+
+\textbf{Prolly Tree との比較}. DoltDB で使用される Prolly Tree は、コンテンツ依存の確率的分割により構造的な差分検出を可能にする。これは Git のような完全な分岐・マージ履歴をサポートするバージョン管理システムに向いている。一方、Slate は線形の履歴のみを想定し、二つの履歴の差異 (分岐) を効率的に検出することを目的としている。この設計上の選択により、Slate は Prolly Tree は Slate と比較して約 66 倍の追記性能を達成しているが、非線形な履歴管理は本質的にサポートしていない。
+
+\subsubsection{適用可能なユースケース}
+
+\textbf{分散トランザクションログ}. Kafka や Raft のような分散ログシステムでは、レプリカ間の同期と差異の修復が頻繁に発生する。従来の手法では末尾からの線形添削で分岐点を検出するため、大規模な履歴遡及が必要な場合に $O(n)$ の比較コストが発生する。Slate の差異検出プロトコルはこれを $O(\log n)$ ラウンドに改善し、各ラウンドで $O(\log n)$ のハッシュ値のみを交換する。図 \ref{fig:diff_detect_performance} に示す実験結果では、$n=8\mathrm{Mi}$ のデータ列において、最悪ケースであっても約 $4.5$ msec で差異 (分岐) 位置を特定できることが示されている。
+
+\textbf{ブロックチェーン}. ブロックチェーンの軽量クライアントは完全なブロック履歴を保持せずに特定のトランザクションの存在を証明する必要がある。Slate の層サンプルは $O(\log n)$ サイズで従来の Merkle Tree と同等の包含証明を提供する。加えて、Slate の時間局所性により、最新ブロックの検証は $O(1)$ で完了する。また、Merkle Tree の特性を持つ Slate はデータ列全体を証明する構造として利用できることから、ブロック列またはトランザクション列そのものを Slate で構成するブロックチェーンも可能である。
+
+\textbf{非同期レプリケーション}. 地理的に分散したデータセンター間の非同期レプリケーションでは、ネットワーク分断後の再同期が課題となる。Slate は同期再開時に分岐が発生していないことを暗号論的に証明し、もし破損が存在する場合は必要な部分の迅速な転送と修復を可能にすることで回復時間目標 (RTO) の短縮に寄与する。
+
+\textbf{監査ログと改ざん検出}. Certificate Transparency のような監査ログシステムでは、ログの完全性検証と効率的な監査が求められる。Slate は History Tree と同等の暗号論的保障を提供しながら、追記と最新データアクセスの効率を改善している。
+
+\subsubsection{設計上のトレードオフ}
+
+\textbf{空間効率 vs. 認証機能}. Slate の空間計算量 $O(n \log n)$ は、木構造を持たない $O(n)$ の単純なシーケンシャルファイルと比較して $\log n$ 倍のオーバーヘッドを伴う。理論値では 8 バイトのデータを保存する $n=8\mathrm{Mi}$ の Slate (file) のストレージ消費量 $|S_{8\mathrm{Mi}}|=5.0\mathrm{GiB}$ に対し、木構造 (中間ノード) 二必要な領域は $4.5\mathrm{GiB}$ であり、これは全体の約 $90$\% を占めている。このオーバーヘッドは、分岐検出と完全性検証の機能を提供するために必要なトレードオフである。
+
+\textbf{最新変調 vs. 均一アクセス}. Slate は最新データへのアクセスを $O(1)$ で提供する代わりに、古いデータへのアクセスコストが対数的に増加する。図 \ref{fig:get_performance} が示すように、$\delta$ が大きい範囲では Binary Merkle Tree や IAVL+ の方が低レイテンシを達成する。したがって、アクセスパターンが均一なワークロード (例えばランダムアクセスや監査目的での全履歴スキャン) では Slate の優位性は限定的となる。
+
+\textbf{追記専用 vs. 汎用操作}. Slate は追記と切り詰めのみをサポートし、任意位置への挿入や個別要素の更新をサポートしていない。この制約により直列化形式の単純性と追記性能が達成されているが、一般的なデータベースのワークロードには適さない。
+
+\textbf{メモリフットプリント}. Slate の効率的な動作には、最新エントリ $e_n$ をメモリ上に保持することが前提となる。$e_n$ のサイズは $O(\log n)$ であり、$n=2^{64}$ 付近でも高々 $64$ 個のノード (各ノード 50 bytes として約 3.2 kB) 似すぎないため、実用上の制約とはならない。しかし、セクション \ref{sec:cache_effectiveness} で述べたレベル $k$ キャッシュを使用する場合、$O(2^k \log n)$ のメモリが必要となり、メモリ制約のある環境では考慮が必要である。
+
+\subsubsection{制限事項}
+
+\textbf{ランダムアクセス性能}. Slate は時間局所性を前提として設計されており、一様にランダムなアクセスでは Binary Merkle Tree や IAVL+ に劣る場合がある。
+
+\textbf{非線形履歴}. 本論文で提案する Slate は線形のログ構造を前提としており、Git のような分岐と統合を伴う非線形な履歴はサポートしない。ただし、Slate の永続性を利用して、木構造の世代を分岐に対応することは可能であると考えられる。
+
+\textbf{切り詰めと並行性}. セクション \ref{sec:truncate_operation} で議論したように、Truncate 操作は並行読み取りと競合する可能性がある。本論文では SWMR モデルにおける Append と Get の並行実行の安全性を示したが、Truncate を含む完全な並行制御については、コミット済み領域の保護や MVCC の実装など、追加の機構が必要となる。
+
+\textbf{ネットワークレイテンシ}. セクション \ref{sec:diff_detect_protocol} で議論した差異検出プロトコルは、最悪ケースで $\lceil\log_2 n\rceil$ ラウンドの通信を要する。各ラウンドで $O(\log n)$ サイズの層サンプルを交換するため、通信量自体は小さいが、項レイテンシなネットワーク環境では往復遅延が累積する。差異位置の事前予測が可能な場合は、初期の層サンプルの選択を最適化することで改善の余地がある。
+
+\subsubsection{将来の拡張可能性}
+
+本論文で提示した Slate の設計は、追記偏重かつ時間局所性を持つワークロードに特化しており、上述の制限事項はこの設計選択の帰結である。以下の拡張は特定のユースケースにおいて有用となり得るが、これらは Slate の中核的な貢献とは独立した最適化であり、本論文の範囲外とする。参照実装は http://github.com/torao/slate で公開されてており、実務者による拡張や応用を歓迎する。
+
+\textbf{Compaction via Algebraic State Aggregation}. Slate の層別木構造は、各葉ノードが結合可能な状態を表す場合に、LSM-Tree に似た段階的コンパクション機構を実装できる可能性がある。具体的には、状態集合 $S$ 上の結合的な二項演算子 $\oplus: S\times S\to S$ が定義されているとき、各層別木 $T'_{i,j}$ に含まれる $2^j$ 個の葉ノードの状態を $\oplus$ で集約した単一の状態 $s'_{i,j}=s_{i-2^j+1} \oplus s_{i-2^j+2} \oplus \ldots \oplus s_i$ に置換できる。この集約により、完全二分木として確定した層別木は個々の葉を保持する必要がなくなり、空間計算量を $O(n \log n)$ から $O(\log n)$ に削減できる。演算子 $\oplus$ が可換かつ冪等である場合 (例: 集合の和、最大値、ブルームフィルタの合成など)、集約順序に依存しない決定論的な結果が保証される。このような手法は、イベントソーシングにおける状態スナップショット、時系列データベースにおけるダウンサンプリング、または分散カウンタの集約といった目的で応用されており、Slate の追記最適化特性を維持しながら状態保持効率を改善する拡張として検討することができる。
+
+\textbf{適応的キャッシュ戦略}. セクション \ref{sec:cache_effectiveness} で評価したレベル $k$ キャッシュは静的な構成であるが、利用可能なメモリリソースとワークロードの時間局所性を動的に推定し、キャッシュレベル $k$ を適用的に調整したり、非均等ホップ数のキャッシュ、あるいはアクセス過多の層別木ルートのキャッシュなど、さまざまな戦略が考えられる。特に、アクセスパターンが時間とともに変化する環境では、適応的なキャッシュ戦略がメモり項チルト性能のバランスを改善する可能性がある。
+
+\textbf{並列差異検出}. 現在の差異検出プロトコルは単一の層サンプルを逐次的に交換するが、複数の部分木に対して並行して差異検出を実行するコトでラウンド数を削減できる可能性がある。特に、複数の差異位置を検出する場合や、差異位置の分布に事前知識がある場合に有効となり得る。
+
+\section{Related Work}
+
+本セクションでは Slate に関連する戦況研究を概観し、本研究の位置づけを明確にする。関連研究は Merkle Tree とその変種、認証付きデータ構造、永続データ構造、ログ構造ストレージ、および分散システムにおけるログ同期の 5 つの観点から整理する。
+
+\subsection{Merkle Tree とその変種}
+
+\textbf{Merkle Tree}. Merkle \cite{merkle1989} が提案したハッシュツリーは、データ集合の完全性を効率的に検証するための技術基盤である。完全二分木構造において、各葉ノードはデータ要素のハッシュ値を保持し、各中間ノードは子ノードのハッシュ値の連結から計算されるハッシュ値を保持する。ルートハッシュは木全体のダイジェストとして機能し、$O(\log n)$ サイズの包含証明 (所属証明または認証パス) により任意の要素の存在を検証できる。しかし、古典的な Merkle Tree は静的なデータ集合を前提としており、動的な追加操作に対しては木全体の再構築が必要となる。
+
+\textbf{History Tree}. Crosby と Wallach \cite{crosby2009} は、追記操作をサポートする動的な Merkle Tree の変種である History Tree を提案した。この構造は $n$ の 2 進数表現に対応する完全二分部分木の集合として木を構成し、新しいデータの追加時に $O(\log n)$ のノードのみを更新する。Slate は History Tree の構造的特性を継承しつつ、直列化形式の定義、I/O 複雑度の形式化、および分岐(差異)検出プロトコルの設計という拡張を行っている。特に、History Tree の論文では二次記憶装置への永続化や分散環境でのログ同期については議論されておらず、本論文はこれらの実用的側面を補完している。
+
+\textbf{Merkle Mountain Range}. Todd \cite{***} が提案した Merkle Mountain Tree (MMR) は History Tree と類似した追記専用の構造を持つ。MMR は複数の完全二分木 ("Mountain") の列として表現され、各追加操作で高々 $O(\log n)$ 個のノードが更新される。これは Grin や Mimblewimble プロトコルなどのブロックチェーン実装で採用されている。Slate と MMR は構造的に類似しているが、Slate はエントリ単位での直列化形式を明示的に定義し、時間局所性に基づく I/O 回数の理論的解析を提供している点で異なる。
+
+\textbf{Merkle Search Tree}. Auvolat と Taiani \cite{***} はキー順序付きデータに対する確率的な Merkle Tree である Merkle Search Tree を提案した。この構造は、キーのハッシュ値に基づいて木の形状を決定し、同一のキー集合に対して決定論的な木構造を生成する。Slate との主要な違いは、Merkle Search Tree がキー順序に基づく委任胃の位置への挿入をサポートする Merkle Tree を構築するのに対し、Slate は時間順序に基づく追記操作に特化している点である。この設計選択により、Slate は追記操作の I/O を $O(1)$ に抑えている。
+
+\textbf{Prolly Tree}. DoltDB \cite{***} で使用されている Prolly Tree (Probabilistic B-Tree) は、コンテンツ依存の確率的分割により構造的な差分検出を可能にする。各ノードの境界はデータのハッシュ値によって確率的に決定され、同一のデータ集合に対して同一の木構造が生成される。これにより、Git のような分岐と統合を効率的にサポートする。Slate は線形な履歴のみを想定し、非線形名分岐管理をサポートしないが、代わりに追記性能で約 66 倍の優位性を達成している。
+
+\subsubsection{認証付きデータ構造}
+
+\textbf{IAVL+}. Cosmos SDK \cite{***} で使用される IAVL+ は、AVL 木に Merkle Tree ハッシュを組み合わせた認証付きデータ構造である。各ノードは部分木のハッシュ値を保持し、任意のキーに対する包含証明を $O(\log n)$ で生成できる。また IAVL+ は各バージョンを永続化し、過去の状態へのアクセスを可能にする。しかし、各更新操作で AVL 木の再平衡化が発生するため、追記偏重ワークロードでは Slate と比較して約 56 倍のオーバーヘッドが生じる。
+
+\textbf{Authenticated Data Structures}. Tamassia \cite{***} は認証付きデータ構造の一般的な枠組みを提示した。この枠組みでは、信頼できるソースがデータ構造のダイジェストを公開し、信頼できないサーバがクエリ結果と共に検証可能な証明を提供するという、Merkle Tree を一般化している。Slate はこの枠組みにおいて、追記専用ログに特化した認証付きデータ構造として位置づけられる。あるいは、ノードに注目すれば木構造だが、エントリに注目すれば認証付きスキップリストとも見える。定義 \ref{def:stratum_sample} の層サンプルは包含証明の変種であり、差異検出プロトコルは 2 つの認証付きログ間の検証のみならず、差異の位置の特定に拡張している。
+
+\textbf{Certificate Transparency}. Laurie ら \cite{ct2021} が設計した Certificate Transparency (CT) は、TLS 証明書の発行履歴を公開監査可能なログとして記録するシステムである。CT ログは History Tree (RFC 6962 では Merkle Tree Hash と呼称) を使用し、証明書の包含証明と一貫性証明を提供する。Slate は CT ログと類似した構造を持つが、分散レプリカ間のバンク検出と修復という、CT では想定されていないユースケースに焦点を当てている。CT ログは単一の信頼できるログサーバを前提としているのに対し、Slate は複数のレプリカ間での不整合を許容し、その効率的な検出と修復を目的としている。
+
+\textbf{Verifiable Data Structures}. Google の Trillian \cite{***} は、CT を一般化した検証可能なデータ構造の実装を提供する。Trillian はログモード (追記専用) とマップモード (Key-Value) をサポートし、さまざまなアプリケーションに対応する。Slate の直列化形式と分岐検出プロトコルは Trillian のログモードを補完する技術として位置づけられる。
+
+\subsubsection{永続データ構造}
+
+\textbf{Partially Persistent Data Structures}. Driscoll ら \cite{driscoll1986} は、データ構造の永続化に関する体系的な手法を提示した。部分的永続化 (partial persistence) では、すべての過去のバージョンへの読み取りアクセスと、最新バージョンへの更新が可能となる。彼らの手法は、各ノードにバージョンスタンプと追加のポインタを付与することで、任意のデータ構造を永続化する。Slate は、部分的永続化の特殊ケースとして、2 進数表現に基づく自然なバージョン階層を活用している。各エントリ $e_i$ は世代 $i$ で追加されるすべてのノードを集約しており、Driscoll らの手法で必要とされる複雑なポインタ管理やバージョンスタンプを排除している。
+
+\textbf{Functional Data Structures}. 関数型プログラミングの文脈では、不変データ構造 (immutable data structures) が広く研究されている。Okasaki \cite{***} は永続的なリスト、木、キューなどの効率的な実装を体系化した。Slate の層別木は不変性を持ち、一度作成された完全二分部分木は将来のそうさで変更されることがない。この特性により、セクション \ref{sec:***} で示した SWMR 並行実行モデルにおける安全な並行アクセスが保証される。
+
+\textbf{Copy-on-Write B-Tree}. Rodeh \cite{***} は、ファイルシステム向けの Copy-on-Write B-Tree を提案した。この構造は、更新時に影響を受けるノードのみをコピーし、過去のバージョンを効率的に保持する。Btrfs や ZFS などの現代的なファイルシステムで採用されている。Slate のエントリ構造も類似した原理に基づいているが、B-Tree の汎用的な挿入・削除操作ではなく、追記専用操作に特化することで、より単純かつ効率的な実装を実現している。
+
+\subsubsection{ログ構造ストレージ}
+
+\textbf{Log-Structured Merge Tree}. O'Neil ら \cite{***} が提案した LSM-Tree は書き込み最適化されたインデックス構造である。メモリ上のバッファに書き込みを蓄積し、定期的にディスク上のソート済みファイルにマージする。LevelDB、RocksDB、Cassandra などの多くの現代的なストレージシステムで採用されている。Slate は LSM-Tree とは異なるアプローチを取り、各エントリを独立した追記単位として直列化する。これにより、LSM-Tree で必要なコンパクション処理を排除し、追記操作を $O(1)$ の I/O で完結させている。図 \ref{fig:append_performance} では Slate (file) が Slate (rocksdb) と比較して 3 倍以上の追記性能を達成しており、これはコンパクションオーバーヘッドの排除による効果であると考えられる。
+
+\textbf{Write-Ahead Logging}. データベースシステムにおける Write-Ahead Loggin (WAL) \ref{***} は、トランザクションの永続性を保証するための標準的な手法である。WAL は追記専用のログ構造であり、Slate の想定するワークロードと親和性が高い。従来の WAL はインデックスを持たないシーケンシャルファイルであるが、Slate は WAL に認証機能と効率的なランダムアクセスを付与する拡張として位置づけられる。
+
+\textbf{Kafka.} Kreps ら \cite{kafka2011} が開発した Apache Kafka は、分散メッセージングシステムとして広く利用されている。Kafka のログは追記専用のパーティション化された構造を持ち、オフセットベースの消費を提供する。Kafka のレプリカ間同期は、リーダーからフォロワーへの線形名複製に基づいており、分岐検出の効率化は本研究の主要な同期の一つである。Slate の差異検出プロトコルは Kafka のような分散ログシステムにおけるレプリカ間同期の効率を改善する可能性がある。
+
+\subsubsection{分散システムにおけるログ同期}
+
+\textbf{Raft と Paxos}. Raft \cite{ongaro2014raft} および Paxos \cite{***} は、分散システムにおける合意プロトコルの代表的なアルゴリズムである。Raft のログ複製は、リーダーがフォロワーに AppendEntries RPC を送信し、フォロワーは自身のログとの整合性を確認する。ログの不整合が検出された場合、Raft はバックトラッキングにより不一致点を探索するが、最悪ケースでは $O(n)$ の比較が必要となる。Slate の差異検出プロトコルはこの探索を $O(\log n)$ ラウンドに改善する。ただし、Slate はログの内容の暗号論的比較を前提としており、Raft の term と index に基づく比較とは異なるアプローチである。
+
+\textbf{Vector Clock と Version Vector}. 分散システムにおける因果関係の追跡には Vector Clock \cite{***} や Version Vector \cite{***} が広く使用されている。これらの手法は、イベント間の happened-before 関係を効率的に判定する。Slate は因果関係の追跡ではなく、2 つのログ間の内容の同一性を暗号論的に検証することに焦点を当てている。したがって Vector Clock と Slate は補完的な技術であり、組み合わせて使用することが可能である。
+
+\textbf{Merkle-CRDTs}. Sanjuan ら \cite{***} は Merkle DAG と Conflict-free Replicated Data Types (CRDTS) \cite{***} を組み合わせた Merkle-CRDTs を提案した。この構造は、分散環境での効率的な同期と、操作の交換可能性を保証する。IPFS や libp2p などの分散システムで採用されている。Slate は CRDT の特性を持たないが、追記専用と制約により、操作の順序に関する競合が発生しない単純なモデルを提供している。
+
+\textbf{Anti-Entropy Protocols}. Demers ら \cite{***} が提案した Anti-Entropy プロトコルは、分散システムにおけるレプリカ間の不整合を検出・修復するための一般的な手法である。Merkle Tree を用いた効率的な差分検出は、Dynamo \cite{***} や Cassandra \cite{***} などの分散データベースで採用されている。Slate の差異検出プロトコルはこれらの手法を拡張し、追記専用ログに特化した最適化を行っている。特に、時間局所性に基づく非対称な I/O 特性は、分岐が最新近傍に集中津する典型的なケースでの効率を改善する。
+
+\subsubsection{時間局所性とキャッシュ}
+
+\textbf{Web アクセスパターン}. Almeida ら \cite{almeida1996} および Barford と Crovella \cite{barford1998} は、Web リクエストにおけるアクセスパターンが重尾分布 (特に対数正規分布やべき乗則) に従うことを示した。この時間局所性は、キャッシュ設計やプリフェッチ戦略に重要な示唆を与える。Slate の設計は、このような時間局所性を前提とし、最新のデータへのアクセスを $O(1)$ 回の I/O で提供することで、現実的なワークロードでの効率を最適化している。
+
+\textbf{ブロックチェーンのアクセスパターン}. Sornette と Zhang \cite{sornette2025} は、Bitcoin におけるトランザクションフロートと保持時間がべき乗則に従うことを示した。ブロックチェーンのような追記専用データ構造においても、最新データへのアクセスが統計的に偏ることが確認されている。Slate の時間局所性に基づく設計は、このようなワークロードに特に適している。
+
+\subsubsection{本研究の位置づけ}
+
+表 \ref{table:Comparison_of_characteristics_with_related_data_structures} に、Slate と関連するデータ構造の特性比較を示す。Slate は History Tree の構造を基盤としながら、エントリによって時間局所性を空間局所性にパックし、追記 I/O の $O(1)$ 化、時間局所性に基づくアクセス効率の形式化、および分散環境での分岐検出プロトコルという独自の貢献を行っている。既存に認証付きデータ構造 (IAVL+、Polly Tree) が汎用的な操作をサポートするのに対し、Slate は追記専用という制約を受け入れることで、追記変調ワークロードにおける大幅な性能向上を達成している。
+
+\begin{table}
+    \centering
+    \begin{tabular}{llllll}
+         \hline
+         データ構造 & 追記 I/O & Get I/O (最新) & Get I/O (最古) & 分岐検出 & 任意挿入 \\
+         \hline \hline
+         Binary Merkle Tree & $O(n)$ & $O(\log n)$ & $O(\log n)$ & $O(n)$ & - \\ \hline
+         History Tree & $O(\log n)$ & $O(1)$ & $O(\log n)$ & - & - \\ \hline
+         IAVL+ & $O(\log n)$ & $O(\log n)$) & $O(\log n)$ & - & ✔ \\ \hline
+         Polly Tree & $O(\log n)$ & $O(\log n)$ & $O(\log n)$ & $O(\log n)$ & ✔ \\ \hline
+         Merkle Search Tree & $O(\log n)$ & $O(\log n)$ & $O(\log n)$ & $O(\log n)$ & ✔ \\ \hline
+         Slate & $O(1)$ & $O(1)$ & $O(\log n)$ & $O(\log^2 n)$ & - \\
+    \end{tabular}
+    \caption{関連データ構造との特性比較。I/O 複雑度は二次記憶装置への理論的なアクセス回数を示す。分岐検出は 2 つの木構造間の差異位置を特定するための複雑度を示す。"-" は該当する操作が定義されていないか、本研究で議論されていないことを示す。}
+    \label{table:Comparison_of_characteristics_with_related_data_structures}
+\end{table}
 
 \section{Conclusion}
-- 貢献の再確認（3つのkey contributionsを再度）
-- 理論的意義：時間的局所性の形式化と証明
-- 実用的意義：実世界のワークロードでの性能改善
-- 今後の方向性：
-   - 削除操作の最適化
-   - より強力な暗号プリミティブ
-   - 他の分散システムへの適用
-- 実装の公開（GitHub URL）
 
+本論文は、分散ログの同期と分岐検出に特化した追記最適化 Merkle Tree である Slate (Stratified Hash Tree) を提案した。Slate は History Tree の構造を基盤としながら、追記偏重かつ時間局所性を持つワークロードに対して理論的・実践的な最適化を実現している。
 
-\subsection{背景：ハッシュツリーの応用と課題}
-\subsection{追記最適化の必要性}
-\subsection{本研究の目的と貢献}
-\subsection{本論文の構成}
+\textbf{理論的貢献}. 本研究は、Slate における I/O 回数がハミング距離に従うことを形式化し、最新エントリから任意の葉への到達コストの上限 $c^+(n,i)$ および下限 $c^-(n,i)$ を導出した。この解析により、最新データへのアクセス効率が $O(1)$ と最適で、過去のデータへのアクセスでも $O(\log n)$ を超えないという非対称なアクセス特性が数学的に保証される。また、$n$ の 2 進数表現に基づく決定論的な木構造の構築手法を確立し、同一世代に対して常に同一の構造が生成されることを示した。
 
-\section{既存研究と位置づけ}
-\subsection{Merkle Tree とその変種}
-\subsection{ブロックチェーン・分散ログ・同期アルゴリズムへの応用}
-\subsection{既存手法の問題点：対称性と時間的局所性の欠如}
-\subsection{本研究の新規性}
+\textbf{設計上の貢献}. Slate の直列化形式は、各エントリが独立した追記単位として機能し、追記操作が $O(1)$ の Write I/O で完結することを保証する。命題 \ref{prop:append} で示したように、データ $d_n$ の追加に伴う新しいエントリ $e_n$ の構築に必要な情報はすべて直前のエントリ $e_{n-1}$ に含まれており、追加の Read I/O を要しない。この特性は LSM-Tree のようなコンパクション処理を必要とする既存手法と対照的である。さらに、層サンプルに基づく分岐検出プロトコルを設計し、2 つのレプリカ間の差異位置を $O(\log n)$ ラウンド、$O(\log^2 n)$ の通信複雑度で特定する手法を確立した。
 
-\section{距離分布と探索特性}
-\subsection{最新エントリからのハミング距離の定義}
-\subsection{距離分布の二項分布性の証明}
-\subsection{時間的局所性最適化 (Temporal Locality Optimization)}
-\subsection{I/O 効率とキャッシュヒット率のモデル化}
+\textbf{実験的検証}. Rust における参照実装を用いた評価では、Slate の設計原理が実測性能と整合することを確認した。追記性能において、Slate (file) は IAVL+ と比較して約 56 倍、DoltDB と比較して約 66 倍のスループットを達成した。参照性能では、理論的に導出した I/O 回数分布 $\mathrm{IO}(n,i)$ と実測レイテンシが強い相関を示し、Zipf 分布に基づくアクセスパターンでは歪度の増加に伴い平均レイテンシが約 6.3 倍改善した。分岐検出では $n=8\mathrm{Mi}$ における最悪ケースでも約 4.5 msec で差異位置を特定でき、従来の線形探索手法と比較して 3-4 桁の性能改善を達成した。ストレージ消費量についても、$n=8\mathrm{Mi}$ において理論値 $5.0\mathrm{GiB}$ に対して実測値約 $5.4\mathrm{GB}$ と整合し、理論解析の妥当性を実証した。
 
-\section{同期アルゴリズム}
-\subsection{2 系統のデータ列間での差分検出}
-\subsection{層化構造を用いた差分検出の計算手順}
-\subsection{ネットワーク同期と部分ツリー転送の最適化}
-\subsection{アルゴリズムの正当性と停止性の証明}
+\textbf{実用的意義}. Slate は、Merkle Tree の適用範囲に加え、分散トランザクションログ、非同期レプリケーション、バージョン履歴管理システム、ブロックチェーンといった追記偏重かつ時間局所性を持つワークロードに適用可能である。特に、レプリカ間の分岐が最新近傍に集中する典型的なケースでは、Slate の非対称アクセス特性と効率的な分岐検出プロトコルが顕著な優位性をもたらす。追記専用という制約を受け入れることで、汎用的な認証付きデータ構造と比較して大幅な性能向上を達成しており、この設計選択は対象とするワークロードにおいて合理的なトレードオフである。
 
-\section{実装と評価}
-\subsection{実装概要（Rust/Scala 実装例）}
-\subsection{実験設定とデータセット}
-\subsection{パフォーマンス比較（Merkle Tree, LSM-Tree との比較）}
-\subsection{追記性能・同期速度・メモリ消費の評価}
-\subsection{考察：非対称性の実証}
-
-\section{応用可能性と拡張}
-\subsection{分散トランザクションログへの応用}
-\subsection{認証付きデータ構造（ADS）への展開}
-\subsection{キャッシュシステムへの応用}
-\subsection{並列化・ストレージ最適化の方向性}
-
-\section{関連理論との接続}
-\subsection{情報理論・符号理論的観点}
-\subsection{木構造データベースと部分順序理論の関係}
-\subsection{確率的データ構造との比較}
-\subsection{「構造的アルゴリズム」としての一般化}
-
-\section{結論と今後の課題}
-\subsection{本研究のまとめ}
-\subsection{理論的拡張：確率解析と漸近挙動}
-\subsection{応用拡張：分散同期・検証アルゴリズム}
-\subsection{今後の研究課題}
+参照実装は https://github.com/torao/slate で公開されており、本論文で提示した理論と設計の検証、および時ビムでの応用に利用可能である。
 
 \newpage
 
