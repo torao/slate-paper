@@ -1,37 +1,3 @@
-% [Merkle Tree]
-@inproceedings{merkle1989,
-  title={A certified digital signature},
-  author={Merkle, Ralph C},
-  booktitle={Conference on the Theory and Application of Cryptology},
-  pages={218--238},
-  year={1989},
-  organization={Springer}
-}
-
-% [History Tree]
-@inproceedings{crosby2009,
-  author = {Crosby, Scott A. and Wallach, Dan S.},
-  title = {Efficient data structures for tamper-evident logging},
-  year = {2009},
-  publisher = {USENIX Association},
-  address = {USA},
-  abstract = {Many real-world applications wish to collect tamper-evident logs for forensic purposes. This paper considers the case of an untrusted logger, serving a number of clients who wish to store their events in the log, and kept honest by a number of auditors who will challenge the logger to prove its correct behavior. We propose semantics of tamper-evident logs in terms of this auditing process. The logger must be able to prove that individual logged events are still present, and that the log, as seen now, is consistent with how it was seen in the past. To accomplish this efficiently, we describe a tree-based data structure that can generate such proofs with logarithmic size and space, improving over previous linear constructions. Where a classic hash chain might require an 800 MB trace to prove that a randomly chosen event is in a log with 80 million events, our prototype returns a 3 KB proof with the same semantics. We also present a flexible mechanism for the log server to present authenticated and tamper-evident search results for all events matching a predicate. This can allow large-scale log servers to selectively delete old events, in an agreed-upon fashion, while generating efficient proofs that no inappropriate events were deleted. We describe a prototype implementation and measure its performance on an 80-million-event syslog trace at 1,750 events per second using a single CPU core. Performance improves to 10,500 events per second if cryptographic signatures are offloaded, corresponding to 1.1 TB of logging throughput per week.},
-  booktitle = {Proceedings of the 18th Conference on USENIX Security Symposium},
-  pages = {317–334},
-  numpages = {18},
-  location = {Montreal, Canada},
-  series = {SSYM'09}
-}
-
-% [History Tree]
-@article{ct2021,
-  title={Certificate transparency version 2.0},
-  author={Laurie, Ben and Langley, Adam and Kasper, Emilia and Messeri, Eran and Stradling, Rob},
-  journal={Internet Requests for Comments, RFC Editor, RFC},
-  volume={9162},
-  year={2021}
-}
-
 % [永続的データ構造]
 @inproceedings{driscoll1986,
   title={Making data structures persistent},
@@ -39,6 +5,22 @@
   booktitle={Proceedings of the eighteenth annual ACM symposium on Theory of Computing},
   pages={109--121},
   year={1986}
+}
+@book{okasaki1998purely,
+  title={Purely functional data structures},
+  author={Okasaki, Chris},
+  year={1998},
+  publisher={Cambridge University Press}
+}
+
+% [認証付きデータ構造]
+@inproceedings{tamassia2003auth,
+  title={Authenticated data structures},
+  author={Tamassia, Roberto},
+  booktitle={European symposium on algorithms},
+  pages={2--5},
+  year={2003},
+  organization={Springer}
 }
 
 % [時間的局所性] Bitcoin UTXO の保持期間分布 (寿命) がパレート分布に従うことを数理的解析・実証データの両面から明示。
@@ -70,6 +52,14 @@
   booktitle={Proceedings of the 1998 ACM SIGMETRICS joint international conference on Measurement and modeling of computer systems},
   pages={151--160},
   year={1998}
+}
+
+% [左枝移動の符号化]
+@book{knuth1997,
+  title={The Art of Computer Programming: Fundamental Algorithms, Volume 1},
+  author={Knuth, Donald E},
+  year={1997},
+  publisher={Addison-Wesley Professional}
 }
 
 % 既存の分散システム ------------------------------
@@ -111,4 +101,253 @@
   year      = {2013},
   pages     = {385--398},
   url       = {https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala}
+}
+
+% 関連研究 ----------------------------------------------------------
+
+% [Merkle Tree]
+@inproceedings{merkle1989,
+  title={A certified digital signature},
+  author={Merkle, Ralph C},
+  booktitle={Conference on the Theory and Application of Cryptology},
+  pages={218--238},
+  year={1989},
+  organization={Springer}
+}
+
+% [History Tree]
+@inproceedings{crosby2009,
+  author = {Crosby, Scott A. and Wallach, Dan S.},
+  title = {Efficient data structures for tamper-evident logging},
+  year = {2009},
+  publisher = {USENIX Association},
+  address = {USA},
+  abstract = {Many real-world applications wish to collect tamper-evident logs for forensic purposes. This paper considers the case of an untrusted logger, serving a number of clients who wish to store their events in the log, and kept honest by a number of auditors who will challenge the logger to prove its correct behavior. We propose semantics of tamper-evident logs in terms of this auditing process. The logger must be able to prove that individual logged events are still present, and that the log, as seen now, is consistent with how it was seen in the past. To accomplish this efficiently, we describe a tree-based data structure that can generate such proofs with logarithmic size and space, improving over previous linear constructions. Where a classic hash chain might require an 800 MB trace to prove that a randomly chosen event is in a log with 80 million events, our prototype returns a 3 KB proof with the same semantics. We also present a flexible mechanism for the log server to present authenticated and tamper-evident search results for all events matching a predicate. This can allow large-scale log servers to selectively delete old events, in an agreed-upon fashion, while generating efficient proofs that no inappropriate events were deleted. We describe a prototype implementation and measure its performance on an 80-million-event syslog trace at 1,750 events per second using a single CPU core. Performance improves to 10,500 events per second if cryptographic signatures are offloaded, corresponding to 1.1 TB of logging throughput per week.},
+  booktitle = {Proceedings of the 18th Conference on USENIX Security Symposium},
+  pages = {317–334},
+  numpages = {18},
+  location = {Montreal, Canada},
+  series = {SSYM'09}
+}
+
+% [Certificate Transparency]
+@article{ct2021,
+  title={Certificate transparency version 2.0},
+  author={Laurie, Ben and Langley, Adam and Kasper, Emilia and Messeri, Eran and Stradling, Rob},
+  journal={Internet Requests for Comments, RFC Editor, RFC},
+  volume={9162},
+  year={2021}
+}
+
+% [Google Trillion]
+@misc{GoogleTrillian,
+  author       = {{Google}},
+  title        = {Trillian: A Transparent, Highly Scalable and Cryptographically Verifiable Data Store},
+  year         = {2016},
+  howpublished = {GitHub Repository},
+  url          = {https://github.com/google/trillian},
+  note         = {Accessed: 2026-01-14}
+}
+
+% [Verifiable Data Structures] Trillion で使われているデータ構造
+@techreport{Eijdenberg2015VDS,
+  author       = {Eijdenberg, Adam},
+  title        = {Verifiable Data Structures},
+  year         = {2015},
+  month        = nov,
+  institution  = {Google},
+  type         = {White Paper},
+  url          = {https://github.com/google/trillian/blob/master/docs/papers/VerifiableDataStructures.pdf},
+  note         = {Accessed: 2026-01-14}
+}
+
+% [Merkle Mountain Range]
+@misc{todd2013MMR,
+  author       = {Todd, Peter},
+  title        = {Merkle Mountain Range},
+  year         = {2013},
+  howpublished = {OpenTimestamps Project Documentation},
+  url          = {https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md},
+  note         = {First published March 18, 2013. Accessed: 2026-01-13}
+}
+
+% [Merkle Mountain Range is Optimal]
+@inproceedings{bonneau2025merkle,
+  title={Merkle mountain ranges are optimal: On witness update frequency for cryptographic accumulators},
+  author={Bonneau, Joseph and Chen, Jessica and Christ, Miranda and Karantaidou, Ioanna},
+  booktitle={Annual International Cryptology Conference},
+  pages={170--202},
+  year={2025},
+  organization={Springer}
+}
+
+% [Merkle Search Tree]
+@inproceedings{auvolat2019merkle,
+  title={Merkle search trees: Efficient state-based CRDTs in open networks},
+  author={Auvolat, Alex and Ta{\"\i}ani, Fran{\c{c}}ois},
+  booktitle={2019 38th Symposium on Reliable Distributed Systems (SRDS)},
+  pages={221--22109},
+  year={2019},
+  organization={IEEE}
+}
+
+% [Prolly Tree]
+@misc{Noms2015ProllyTree,
+  author       = {{Attic Labs}},
+  title        = {Noms: The Versioned, Forkable, Syncable Database},
+  year         = {2015},
+  howpublished = {GitHub Documentation},
+  url          = {https://github.com/attic-labs/noms/blob/master/doc/intro.md},
+  note         = {Accessed: 2026-01-14}
+}
+
+% [IAVL+]
+@misc{kwon2016cosmos,
+  author       = {Kwon, Jae and Buchman, Ethan},
+  title        = {Cosmos: A Network of Distributed Ledgers},
+  year         = {2016},
+  howpublished = {Cosmos Whitepaper},
+  url          = {https://cosmos.network/whitepaper},
+  note         = {Accessed: 2026-01-14}
+}
+@misc{CosmosIAVL,
+  author       = {{Cosmos/Tendermint Team}},
+  title        = {{IAVL}: Merkleized {IAVL+} Tree Implementation in {Go}},
+  year         = {2017},
+  howpublished = {GitHub Repository},
+  url          = {https://github.com/cosmos/iavl},
+  note         = {Accessed: 2026-01-14}
+}
+
+% [Copy-on-write B-Tree]
+@article{rodeh2008b,
+  title={B-trees, shadowing, and clones},
+  author={Rodeh, Ohad},
+  journal={ACM Transactions on Storage (TOS)},
+  volume={3},
+  number={4},
+  pages={1--27},
+  year={2008},
+  publisher={ACM New York, NY, USA}
+}
+
+% [LSM-Tree]
+@article{o1996log,
+  title={The log-structured merge-tree (LSM-tree)},
+  author={O’Neil, Patrick and Cheng, Edward and Gawlick, Dieter and O’Neil, Elizabeth},
+  journal={Acta informatica},
+  volume={33},
+  number={4},
+  pages={351--385},
+  year={1996},
+  publisher={Springer}
+}
+
+% [Write-Ahead Log]
+@article{mohan1992aries,
+  title={ARIES: A transaction recovery method supporting fine-granularity locking and partial rollbacks using write-ahead logging},
+  author={Mohan, Chandrasekaran and Haderle, Don and Lindsay, Bruce and Pirahesh, Hamid and Schwarz, Peter},
+  journal={ACM Transactions on Database Systems (TODS)},
+  volume={17},
+  number={1},
+  pages={94--162},
+  year={1992},
+  publisher={ACM New York, NY, USA}
+}
+
+% [Version Vector]
+@article{parker1983detection,
+  title={Detection of mutual inconsistency in distributed systems},
+  author={Parker, D Stott and Popek, Gerald J and Rudisin, Gerard and Stoughton, Allen and Walker, Bruce J and Walton, Evelyn and Chow, Johanna M and Edwards, David and Kiser, Stephen and Kline, Charles},
+  journal={IEEE Transactions on Software Engineering},
+  number={3},
+  pages={240--247},
+  year={1983},
+  publisher={IEEE}
+}
+
+% [Vector Clock]
+@book{mattern1988virtual,
+  title={Virtual time and global states of distributed systems},
+  author={Mattern, Friedemann and others},
+  year={1988},
+  publisher={Univ., Department of Computer Science}
+}
+
+% [Merkle-CRDTs]
+@article{sanjuan2020merkle,
+  title={Merkle-crdts: Merkle-dags meet crdts},
+  author={Sanjuan, Hector and Poyhtari, Samuli and Teixeira, Pedro and Psaras, Ioannis},
+  journal={arXiv preprint arXiv:2004.00107},
+  year={2020}
+}
+
+% [CRDTs]
+@inproceedings{shapiro2011conflict,
+  title={Conflict-free replicated data types},
+  author={Shapiro, Marc and Pregui{\c{c}}a, Nuno and Baquero, Carlos and Zawirski, Marek},
+  booktitle={Symposium on Self-Stabilizing Systems},
+  pages={386--400},
+  year={2011},
+  organization={Springer}
+}
+
+% [最小共通祖先問題]
+@article{harel1984fast,
+  title={Fast algorithms for finding nearest common ancestors},
+  author={Harel, Dov and Tarjan, Robert Endre},
+  journal={Siam Journal on Computing},
+  volume={13},
+  number={2},
+  pages={338--355},
+  year={1984},
+  publisher={SIAM}
+}
+
+% [Anti-Entropy プロトコル]
+@inproceedings{demers1987epidemic,
+  title={Epidemic algorithms for replicated database maintenance},
+  author={Demers, Alan and Greene, Dan and Hauser, Carl and Irish, Wes and Larson, John and Shenker, Scott and Sturgis, Howard and Swinehart, Dan and Terry, Doug},
+  booktitle={Proceedings of the sixth annual ACM Symposium on Principles of distributed computing},
+  pages={1--12},
+  year={1987}
+}
+
+% [Amazon Dynamo]
+@article{decandia2007dynamo,
+  title={Dynamo: Amazon's highly available key-value store},
+  author={DeCandia, Giuseppe and Hastorun, Deniz and Jampani, Madan and Kakulapati, Gunavardhan and Lakshman, Avinash and Pilchin, Alex and Sivasubramanian, Swaminathan and Vosshall, Peter and Vogels, Werner},
+  journal={ACM SIGOPS operating systems review},
+  volume={41},
+  number={6},
+  pages={205--220},
+  year={2007},
+  publisher={ACM New York, NY, USA}
+}
+
+% [Cassandra]
+@article{lakshman2010cassandra,
+  title={Cassandra: a decentralized structured storage system},
+  author={Lakshman, Avinash and Malik, Prashant},
+  journal={ACM SIGOPS operating systems review},
+  volume={44},
+  number={2},
+  pages={35--40},
+  year={2010},
+  publisher={ACM New York, NY, USA}
+}
+@inproceedings{van2008efficient,
+  title={Efficient reconciliation and flow control for anti-entropy protocols},
+  author={Van Renesse, Robbert and Dumitriu, Dan and Gough, Valient and Thomas, Chris},
+  booktitle={proceedings of the 2nd Workshop on Large-Scale Distributed Systems and Middleware},
+  pages={1--7},
+  year={2008}
+}
+
+% [Dotted Version Vector] Riak
+@article{preguicca2010dotted,
+  title={Dotted version vectors: Logical clocks for optimistic replication},
+  author={Pregui{\c{c}}a, Nuno and Baquero, Carlos and Almeida, Paulo S{\'e}rgio and Fonte, Victor and Gon{\c{c}}alves, Ricardo},
+  journal={arXiv preprint arXiv:1011.5808},
+  year={2010}
 }
