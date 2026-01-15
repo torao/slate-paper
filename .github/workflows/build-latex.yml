@@ -39,7 +39,8 @@ jobs:
             fonts-noto-mono \
             latexmk \
             texlive-lang-chinese \
-            texlive-fonts-recommended
+            texlive-fonts-recommended \
+            texlive-plain-generic
           
           # フォントキャッシュの更新
           fc-cache -fv
